@@ -8,6 +8,8 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-green?logo=python)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 ![Web UI](https://img.shields.io/badge/Web_UI-Flask-orange)
+[![GHCR](https://img.shields.io/badge/GHCR-ghcr.io/pdone/lite--cron-blue?logo=github)](https://ghcr.io/pdone/lite-cron)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-pdone/lite--cron-blue?logo=docker)](https://hub.docker.com/r/pdone/lite-cron)
 
 **Lightweight Cron Job Scheduler**, run Python scripts with Docker.
 

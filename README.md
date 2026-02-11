@@ -8,6 +8,8 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-green?logo=python)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 ![Web UI](https://img.shields.io/badge/Web_UI-Flask-orange)
+[![GHCR](https://img.shields.io/badge/GHCR-ghcr.io/pdone/lite--cron-blue?logo=github)](https://ghcr.io/pdone/lite-cron)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-pdone/lite--cron-blue?logo=docker)](https://hub.docker.com/r/pdone/lite-cron)
 
 **轻量级定时任务调度器**，基于 Docker 运行 Python 脚本。
 
