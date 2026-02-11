@@ -49,8 +49,8 @@ lite-cron/
 │       ├── app.js                # 前端交互逻辑
 │       └── style.css             # 样式文件
 ├── 📁 tasks/                     # 任务脚本目录（项目内置，可手动添加新脚本）
-│   ├── ikuuu.py                  # iKuuu 签到
-│   ├── pttime.py                 # PTTime 签到
+│   ├── ixxxu.py                  # ixxxu 签到
+│   ├── pxxxme.py                 # Pxxxme 签到
 │   ├── smzdm.py                  # 什么值得买签到
 │   ├── tieba.py                  # 百度贴吧签到
 │   ├── fnclub.py                 # 飞牛Nas论坛签到
@@ -135,7 +135,7 @@ python manage.py status
 
 打开浏览器访问：**http://localhost:5000**
 
-![WebUI](/assets/page.png)
+![WebUI](/assets/page_cn.png)
 
 ## 使用指南
 
@@ -405,7 +405,7 @@ python manage.py tasklogs
 
 1. Fork 本项目
 2. 创建分支：`git checkout -b feature/xxx`
-3. 提交更改：`git commit -m "feat: 添加新功能"`
+3. 提交更改：`git commit -m "feat 添加新功能"`
 4. 推送分支：`git push origin feature/xxx`
 5. 创建 Pull Request
 
