@@ -118,6 +118,7 @@ notify:
 cp compose.example.yml compose.yml
 docker compose up -d
 ```
+> 推荐使用我构建好的镜像，将 `compose.yml` 中 `image: lite-cron:latest` 改为 `image: pdone/lite-cron:latest`，也可以自行构建。
 
 > 完整示例见 [compose.example.yml](./compose.example.yml)
 
