@@ -187,10 +187,10 @@ def main() -> int:
     log_info(f"{sign_result['name']}: {sign_result['value']}")
 
     # 获取打卡动态
-    log_info("获取打卡动态...")
     info_list = get_sign_info(session)
-    for item in info_list:
-        log_info(f"  {item['name']}: {item['value']}")
+    if info_list:
+        lines = [f"  {item['name']}: {item['value']}" for item in info_list]
+        log_info(f"获取打卡动态..." + "\n".join(lines))
 
     # 记录结束时间
     # end_time = datetime.now()

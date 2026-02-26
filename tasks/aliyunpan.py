@@ -144,10 +144,10 @@ def main() -> int:
         return 1
 
     # 执行签到
-    log_info("执行签到...")
     msg_list = sign(access_token)
-    for msg in msg_list:
-        log_info(f"  {msg['name']}: {msg['value']}")
+    if msg_list:
+        lines = [f"  {msg['name']}: {msg['value']}" for msg in msg_list]
+        log_info("执行签到..." + "\n".join(lines))
 
     # 记录结束时间
     # end_time = datetime.now()

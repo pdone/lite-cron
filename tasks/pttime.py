@@ -147,17 +147,17 @@ def sign(cookie: str, uid: str, proxies: dict = None) -> bool:
 
                 sign_msg = (
                     f"签到成功！\n"
-                    f"   总签到: {total_count} 天\n"
-                    f"   连续签到: {consecutive} 天\n"
-                    f"   本次获得: {earned} 魔力值\n"
-                    f"   总魔力值: {final_magic:.1f}"
+                    f"  总签到: {total_count} 天\n"
+                    f"  连续签到: {consecutive} 天\n"
+                    f"  本次获得: {earned} 魔力值\n"
+                    f"  总魔力值: {final_magic:.1f}"
                 )
                 log_success(sign_msg)
             else:
                 sign_msg = (
                     f"签到成功！\n"
-                    f"   总签到: {total_sign} 天\n"
-                    f"   总魔力值: {total_magic}"
+                    f"  总签到: {total_sign} 天\n"
+                    f"  总魔力值: {total_magic}"
                 )
                 log_success(sign_msg)
 
