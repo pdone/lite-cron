@@ -101,6 +101,10 @@ def checkin(session: requests.Session) -> str:
 
          Returns:
          str: 签到结果消息
+
+    Raises:
+        requests.exceptions.RequestException: 网络请求失败
+        json.JSONDecodeError: JSON 解析失败
     """
     try:
         log_info("正在签到...")
@@ -115,11 +119,11 @@ def checkin(session: requests.Session) -> str:
     except requests.exceptions.RequestException as e:
         error_msg = f"签到请求失败: {e}"
         log_error(f"{error_msg}")
-        return error_msg
+        raise requests.exceptions.RequestException(error_msg)
     except json.JSONDecodeError as e:
         error_msg = f"签到响应解析失败: {e}"
         log_error(f"{error_msg}")
-        return error_msg
+        raise json.JSONDecodeError(error_msg, e.doc, e.pos)
 
 
 def get_traffic_info(session: requests.Session) -> str:

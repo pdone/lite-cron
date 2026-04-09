@@ -209,7 +209,8 @@ def webhook_notify(title: str, content: str, config: Dict, log_content: str = ""
     elif content_type == "text/markdown":
         formatted_body = f"**{title}** *{content}*"
         if log_content:
-            formatted_body += f"\n\n最近{log_lines}行日志：\n\n{log_content}"
+            prefixed_log = "\n".join(f"- {line}" for line in log_content.split("\n"))
+            formatted_body += f"\n\n最近{log_lines}行日志：\n\n{prefixed_log}"
     else:
         # text/plain 或其他格式，直接发送 content
         formatted_body = f"{title} {content}"

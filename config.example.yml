@@ -66,6 +66,7 @@ tasks:
       # COIN_TYPE: "1"                   # 投币类型: 1=关注用户视频，其他=随机视频，默认1
       # SILVER2COIN: "false"             # 是否兑换银瓜子为硬币: true/false，默认false
       # RECEIVE_VIP_PRIVILEGE: "false"   # 是否领取大会员权益: true/false，默认false（非大会员不生效）
+      # SKIP_SHARE: "false"              # 是否跳过分享任务: true/false，默认false
 
   - name: "V2EX"
     schedule: "0 9 * * *"

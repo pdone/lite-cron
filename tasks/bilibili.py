@@ -17,6 +17,7 @@ Bilibili 自动签到任务
 - COIN_TYPE: 投币类型（1=关注用户视频，其他=分区视频，默认1）
 - SILVER2COIN: 是否兑换银瓜子为硬币（true/false，默认false）
 - RECEIVE_VIP_PRIVILEGE: 是否领取大会员权益（true/false，默认false）
+- SKIP_SHARE: 是否跳过分享任务（true/false，默认false）
 """
 
 import os
@@ -404,6 +405,7 @@ class BiliBili:
         coin_type = self.check_item.get("coin_type", 1)
         do_silver2coin = self.check_item.get("silver2coin", False)
         receive_vip_privilege = self.check_item.get("receive_vip_privilege", False)
+        skip_share = self.check_item.get("skip_share", False)
 
         # 获取用户信息
         uname, uid, is_login, coin, vip_type, current_exp = self.get_nav()
@@ -532,7 +534,10 @@ class BiliBili:
             log_warning(report_msg)
 
         # 分享任务
-        if aid_list:
+        if skip_share:
+            share_msg = "已配置跳过"
+            log_info("已配置跳过分享任务")
+        elif aid_list:
             aid = aid_list[0].get("aid")
             title = aid_list[0].get("title")
             log_info(f"执行分享任务: 《{title}》...")
@@ -603,6 +608,7 @@ def get_config() -> dict:
         "coin_type": int(os.environ.get("COIN_TYPE", "1")),
         "silver2coin": os.environ.get("SILVER2COIN", "false").lower() == "true",
         "receive_vip_privilege": os.environ.get("RECEIVE_VIP_PRIVILEGE", "false").lower() == "true",
+        "skip_share": os.environ.get("SKIP_SHARE", "false").lower() == "true",
     }
 
 
