@@ -96,13 +96,25 @@ function bindEvents() {
 }
 
 /**
- * 加载所有数据
+ * 加载所有数据（含配置重载）
  */
 async function loadData() {
     try {
+        // 先重载配置和 cron 调度
+        const reloadResponse = await fetch('/api/reload', { method: 'POST' });
+        const reloadData = await reloadResponse.json();
+
+        if (reloadData.success) {
+            showToast(reloadData.message, 'success');
+        } else {
+            showToast(reloadData.message || '配置重载失败', 'warning');
+        }
+
+        // 再刷新任务列表
         await loadTasks();
     } catch (error) {
         console.error('加载数据失败:', error);
+        showToast('加载数据失败', 'error');
     }
 }
 

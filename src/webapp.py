@@ -480,6 +480,90 @@ def api_log_content(filename: str):
         return jsonify({"error": f"读取日志失败: {str(e)}"}), 500
 
 
+@app.route("/api/reload", methods=["POST"])
+def api_reload():
+    """重载配置文件并刷新 cron 调度"""
+    try:
+        # 1. 重新生成环境变量
+        make_env_path = PROJECT_ROOT / "make_env.py"
+        if make_env_path.exists():
+            result = subprocess.run(
+                ["python3", str(make_env_path)],
+                capture_output=True,
+                text=True,
+                cwd=str(PROJECT_ROOT),
+            )
+            if result.returncode != 0:
+                return jsonify({
+                    "success": False,
+                    "message": f"生成环境变量失败: {result.stderr}"
+                }), 500
+
+        # 2. 重新生成 crontab 文件
+        cron_file = "/tmp/crontab"
+        make_cron_path = PROJECT_ROOT / "make_cron.py"
+
+        if not make_cron_path.exists():
+            return jsonify({
+                "success": False,
+                "message": "未找到 make_cron.py"
+            }), 500
+
+        # 清空并重建 crontab 文件头
+        with open(cron_file, "w", encoding="utf-8") as f:
+            f.write("# 自动生成的crontab - 由 WebUI 重载\n")
+            f.write("# 不要手动编辑此文件\n\n")
+            f.write('# 禁用邮件通知，避免输出被邮件系统捕获\n')
+            f.write('MAILTO=""\n\n')
+
+            # 写入全局环境变量
+            f.write("# 全局环境变量\n")
+            f.write(f"APP_ENV={os.environ.get('APP_ENV', 'production')}\n")
+            f.write(f"LOG_LEVEL={os.environ.get('LOG_LEVEL', 'INFO')}\n")
+            f.write("PYTHONPATH=/app\n\n")
+            f.write("PATH=/usr/local/bin:/usr/bin:/bin\n\n")
+
+        # 执行 make_cron.py 生成任务
+        result = subprocess.run(
+            ["python3", str(make_cron_path), "config.yml", cron_file],
+            capture_output=True,
+            text=True,
+            cwd=str(PROJECT_ROOT),
+        )
+
+        if result.returncode != 0:
+            return jsonify({
+                "success": False,
+                "message": f"生成 crontab 失败: {result.stderr}"
+            }), 500
+
+        # 3. 加载新的 crontab
+        result = subprocess.run(
+            ["crontab", cron_file],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            return jsonify({
+                "success": False,
+                "message": f"加载 crontab 失败: {result.stderr}"
+            }), 500
+
+        log_success("配置重载完成")
+        return jsonify({
+            "success": True,
+            "message": "✅ 配置重载完成，cron 调度已更新"
+        })
+
+    except Exception as e:
+        log_error(f"重载配置失败: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"重载失败: {str(e)}"
+        }), 500
+
+
 @app.route("/api/clean", methods=["POST"])
 def api_clean():
     """清理日志"""
