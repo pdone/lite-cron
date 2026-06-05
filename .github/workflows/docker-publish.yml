@@ -1,12 +1,10 @@
 name: Build and Push Docker Image to GHCR
 
 on:
-  # 当有数字版本标签推送时触发（支持 v1.0.0、1.0.0、1.0、1 等格式）
-  # push:
-  #   tags:
-  #     - '[0-9]+.[0-9]+.[0-9]+*'  # 1.0.0, v1.0.0-alpha
-  #     - '[0-9]+.[0-9]+'           # 1.0, v1.0
-  #     - '[0-9]+'                  # 1, v1
+  # 推送 dev 分支时触发
+  push:
+    branches:
+      - 'dev'
   # 当发布 release 时触发
   release:
     types: [published]
@@ -88,15 +86,17 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}
-          # 生成标签：tag名称 + 主版本 + latest
-          # 支持 1.0、1.0.0、v1.0 等格式
+          # 根据事件类型生成不同标签
           tags: |
-            # 1. Tag 名称 (原始 tag，如 1.0)
-            type=ref,event=tag
-            # 2. 提取主版本号 (1.0 -> 1, 1.0.0 -> 1)
-            type=match,event=tag,pattern=^v?(\d+),group=1
-            # 3. 始终生成 latest
-            type=raw,value=latest,enable=true
+            # dev 分支推送时，标签为 dev
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
+            # release 发布时，生成 tag 名称和主版本号
+            type=ref,event=tag,enable=${{ github.event_name == 'release' }}
+            type=match,event=tag,pattern=^v?(\d+),group=1,enable=${{ github.event_name == 'release' }}
+            # 手动触发时，使用输入的标签（默认 latest）
+            type=raw,value=${{ github.event.inputs.tag || 'latest' }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            # release 发布时，生成 latest 标签
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
           # 禁用默认的 sha 和 branch 标签
           flavor: |
             latest=auto
@@ -106,11 +106,17 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKERHUB_REGISTRY }}/${{ env.DOCKERHUB_IMAGE_NAME }}
-          # 生成相同的标签规则
+          # 根据事件类型生成不同标签
           tags: |
-            type=ref,event=tag
-            type=match,event=tag,pattern=^v?(\d+),group=1
-            type=raw,value=latest,enable=true
+            # dev 分支推送时，标签为 dev
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
+            # release 发布时，生成 tag 名称和主版本号
+            type=ref,event=tag,enable=${{ github.event_name == 'release' }}
+            type=match,event=tag,pattern=^v?(\d+),group=1,enable=${{ github.event_name == 'release' }}
+            # 手动触发时，使用输入的标签（默认 latest）
+            type=raw,value=${{ github.event.inputs.tag || 'latest' }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            # release 发布时，生成 latest 标签
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
           flavor: |
             latest=auto
 
