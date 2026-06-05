@@ -553,7 +553,7 @@ def api_reload():
         log_success("配置重载完成")
         return jsonify({
             "success": True,
-            "message": "✅ 配置重载完成，cron 调度已更新"
+            "message": "配置重载完成，cron 调度已更新"
         })
 
     except Exception as e:

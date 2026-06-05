@@ -49,7 +49,7 @@ const elements = {
  */
 function init() {
     bindEvents();
-    loadData();
+    loadData(false);
 }
 
 /**
@@ -59,7 +59,7 @@ function bindEvents() {
     // 工具栏按钮
     elements.btnRefresh.addEventListener('click', () => {
         elements.btnRefresh.classList.add('rotating');
-        loadData();
+        loadData(true);
         setTimeout(() => elements.btnRefresh.classList.remove('rotating'), 500);
     });
     
@@ -96,18 +96,26 @@ function bindEvents() {
 }
 
 /**
- * 加载所有数据（含配置重载）
+ * 加载所有数据
+ * @param {boolean} reload - 是否重载配置（默认 false）
  */
-async function loadData() {
+async function loadData(reload = false) {
     try {
-        // 先重载配置和 cron 调度
-        const reloadResponse = await fetch('/api/reload', { method: 'POST' });
-        const reloadData = await reloadResponse.json();
+        if (reload) {
+            // 先重载配置和 cron 调度
+            try {
+                const reloadResponse = await fetch('/api/reload', { method: 'POST' });
+                const reloadData = await reloadResponse.json();
 
-        if (reloadData.success) {
-            showToast(reloadData.message, 'success');
-        } else {
-            showToast(reloadData.message || '配置重载失败', 'warning');
+                if (reloadData.success) {
+                    showToast(reloadData.message, 'success');
+                } else {
+                    showToast(reloadData.message || '配置重载失败', 'warning');
+                }
+            } catch (reloadError) {
+                console.error('重载配置失败:', reloadError);
+                showToast('重载配置失败', 'error');
+            }
         }
 
         // 再刷新任务列表
