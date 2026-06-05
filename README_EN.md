@@ -44,6 +44,8 @@ lite-cron/
 │   ├── make_cron.py              # Generate crontab configuration
 │   ├── make_env.py               # Generate environment variables
 │   ├── task_wrapper.py           # Task execution wrapper (Python)
+│   ├── logger.py                 # Unified logging module (Python)
+│   ├── logger.sh                 # Unified logging module (Shell)
 │   ├── entrypoint.sh             # Container startup entry
 │   ├── 📁 template/              # HTML templates
 │   │   └── index.html            # Main page template
@@ -187,51 +189,50 @@ python manage.py help               # Show help
 
 ### Writing Task Scripts
 
-Reference `tasks/example.py`:
+Reference existing scripts in `tasks/` directory:
 
 ```python
 #!/usr/bin/env python3
 """
 Task Description: One sentence to describe the task
+
+Environment Variables:
+- API_KEY: API key (required)
+- OPTIONAL_VAR: Optional configuration (optional)
 """
 import os
 import sys
-import logging
-from datetime import datetime
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Import project logger (REQUIRED - don't use standard logging)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+from logger import log_info, log_success, log_error, log_warning, log_debug
 
 # Read configuration from environment variables
 API_KEY = os.environ.get('API_KEY')
 
 
-def main():
-    """Main function: task logic"""
-    try:
-        logger.info("🚀 Task started")
+def main() -> int:
+    """Main function: task logic, returns 0 for success, 1 for failure"""
+    log_info("🚀 Task started")
 
+    try:
         # Task logic
-        logger.info("📋 Executing...")
+        log_info("📋 Executing...")
         result = do_something(API_KEY)
 
         if result:
-            logger.info("✅ Task succeeded")
+            log_success("✅ Task succeeded")
             return 0
         else:
-            logger.warning("⚠️ Task failed")
+            log_warning("⚠️ Task failed")
             return 1
 
     except Exception as e:
-        logger.error(f"❌ Task exception: {str(e)}")
+        log_error(f"❌ Task exception: {str(e)}")
         return 1
 
     finally:
-        logger.info("🏁 Task ended")
+        log_info("🏁 Task ended")
 
 
 def do_something(api_key: str) -> bool:
@@ -429,6 +430,17 @@ Pull Requests and Issues are welcome!
 | `ci` | CI/CD configuration changes | `ci: modify GitHub Actions config` |
 | `build` | Build system or external dependency changes | `build: add docker support` |
 | `revert` | Revert commit | `revert: revert feat: add payment feature` |
+
+### Commit Message Examples
+
+```
+feat Improve xxx experience
+
+- Optimize xxxx
+- Refactor xxxx
+```
+
+Note: There should be no colon after `feat` and other prefixes.
 
 ### Code Standards
 

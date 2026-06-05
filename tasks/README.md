@@ -12,7 +12,7 @@
 | [tieba.py](#tiebapy) | 百度贴吧自动签到 | `TIEBA_COOKIE` | - |
 | [fnclub.py](#fnclubpy) | 飞牛Nas论坛自动签到 | `FNNAS_COOKIE` | - |
 | [aliyunpan.py](#aliyunpanpy) | 阿里云盘自动签到 | `ALIYUN_REFRESH_TOKEN` | - |
-| [bilibili.py](#bilibilipy) | B站多功能签到 | `BILIBILI_COOKIE` | `COIN_NUM`, `COIN_TYPE`, `SILVER2COIN`, `RECEIVE_VIP_PRIVILEGE` |
+| [bilibili.py](#bilibilipy) | B站多功能签到 | `BILIBILI_COOKIE` | `COIN_NUM`, `COIN_TYPE`, `SILVER2COIN`, `RECEIVE_VIP_PRIVILEGE`, `SKIP_SHARE` |
 | [v2ex.py](#v2expy) | V2EX 论坛自动签到 | `V2EX_COOKIE` | `V2EX_PROXY`, `V2EX_SSL_VERIFY` |
 | [nodeseek.py](#nodeseekpy) | NodeSeek 论坛自动签到 | `NODESEEK_COOKIE` | `NODESEEK_RANDOM`, `NODESEEK_PROXY` |
 
@@ -183,6 +183,7 @@ tasks:
 - `COIN_TYPE`: 投币类型（1=关注用户视频，其他=分区视频，默认1）
 - `SILVER2COIN`: 是否兑换银瓜子为硬币（true/false，默认false）
 - `RECEIVE_VIP_PRIVILEGE`: 是否领取大会员权益（true/false，默认false）
+- `SKIP_SHARE`: 是否跳过分享任务（true/false，默认false）
 
 **配置示例：**
 ```yaml
@@ -198,6 +199,7 @@ tasks:
       COIN_TYPE: "1"
       SILVER2COIN: "true"
       RECEIVE_VIP_PRIVILEGE: "true"
+      SKIP_SHARE: "false"
 ```
 
 ---

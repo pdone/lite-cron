@@ -44,6 +44,8 @@ lite-cron/
 │   ├── make_cron.py              # 生成 crontab 配置文件
 │   ├── make_env.py               # 生成环境变量配置文件
 │   ├── task_wrapper.py           # 任务执行包装器（Python）
+│   ├── logger.py                 # 统一日志管理模块（Python）
+│   ├── logger.sh                 # 统一日志管理模块（Shell）
 │   ├── entrypoint.sh             # 容器启动入口
 │   ├── 📁 template/              # HTML 模板目录
 │   │   └── index.html            # 主页面模板
@@ -188,51 +190,50 @@ python manage.py help               # 查看帮助
 
 ### 编写任务脚本
 
-参考 `tasks/example.py`：
+参考 `tasks/` 目录下的现有脚本：
 
 ```python
 #!/usr/bin/env python3
 """
 任务描述：一句话说明任务功能
+
+环境变量：
+- API_KEY: API 密钥（必需）
+- OPTIONAL_VAR: 可选配置（可选）
 """
 import os
 import sys
-import logging
-from datetime import datetime
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# 导入项目日志模块（必须使用项目 logger，不要用标准 logging）
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+from logger import log_info, log_success, log_error, log_warning, log_debug
 
 # 从环境变量读取配置
 API_KEY = os.environ.get('API_KEY')
 
 
-def main():
-    """主函数：任务逻辑"""
-    try:
-        logger.info("🚀 任务开始")
+def main() -> int:
+    """主函数：任务逻辑，返回 0 表示成功，1 表示失败"""
+    log_info("🚀 任务开始")
 
+    try:
         # 任务逻辑
-        logger.info("📋 执行操作...")
+        log_info("📋 执行操作...")
         result = do_something(API_KEY)
 
         if result:
-            logger.info("✅ 任务成功")
+            log_success("✅ 任务成功")
             return 0
         else:
-            logger.warning("⚠️ 任务失败")
+            log_warning("⚠️ 任务失败")
             return 1
 
     except Exception as e:
-        logger.error(f"❌ 任务异常: {str(e)}")
+        log_error(f"❌ 任务异常: {str(e)}")
         return 1
 
     finally:
-        logger.info("🏁 任务结束")
+        log_info("🏁 任务结束")
 
 
 def do_something(api_key: str) -> bool:
@@ -431,6 +432,16 @@ python manage.py tasklogs
 | `build`    | 构建系统或外部依赖变更       | `build 添加 docker 支持`      |
 | `revert`   | 回滚提交              | `revert 回滚 feat: 添加支付功能`  |
 
+### 提交信息示例
+
+```
+feat 改进xxx体验
+
+- 优化 xxxx
+- 重构 xxxx
+```
+
+注意：feat 以及其他前缀后，不应有冒号
 ### 代码规范
 
 - 📝 使用中文注释
