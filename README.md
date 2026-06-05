@@ -51,12 +51,15 @@ lite-cron/
 │       ├── app.js                # 前端交互逻辑
 │       └── style.css             # 样式文件
 ├── 📁 tasks/                     # 任务脚本目录（项目内置，可手动添加新脚本）
-│   ├── ixxxu.py                  # ixxxu 签到
-│   ├── pxxxme.py                 # Pxxxme 签到
+│   ├── ikuuu.py                  # iKuuu 签到
+│   ├── pttime.py                 # PTTime 签到
 │   ├── smzdm.py                  # 什么值得买签到
 │   ├── tieba.py                  # 百度贴吧签到
 │   ├── fnclub.py                 # 飞牛Nas论坛签到
-│   └── aliyunpan.py              # 阿里云盘签到
+│   ├── aliyunpan.py              # 阿里云盘签到
+│   ├── bilibili.py               # 哔哩哔哩签到
+│   ├── v2ex.py                   # V2EX 签到
+│   └── nodeseek.py               # NodeSeek 签到
 ├── 📁 data/                      # 持久化数据目录
 └── 📁 logs/                      # 运行时日志目录
 ```

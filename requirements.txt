@@ -1,6 +1,7 @@
 # 定时任务容器依赖
 PyYAML==6.0.1
 requests>=2.28.0
+curl_cffi>=0.5.0
 
 # Web 界面依赖
 Flask>=2.0.0

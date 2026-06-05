@@ -78,6 +78,15 @@ tasks:
       # V2EX_PROXY: "http://127.0.0.1:7890"  # 可选，代理服务器地址
       # V2EX_SSL_VERIFY: "false"             # 可选，是否验证SSL证书，默认false
 
+  - name: "NodeSeek"
+    schedule: "0 10 * * *"
+    script: "tasks/nodeseek.py"
+    description: "NodeSeek论坛签到"
+    enabled: true
+    env:
+      NODESEEK_COOKIE: "your_nodeseek_cookie_here"
+      NODESEEK_RANDOM: "true"                # 可选，是否随机鸡腿: true/false，默认true
+
 # 通知配置
 notify:
   # 任务失败时发送通知

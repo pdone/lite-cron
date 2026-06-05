@@ -14,6 +14,7 @@
 | [aliyunpan.py](#aliyunpanpy) | 阿里云盘自动签到 | `ALIYUN_REFRESH_TOKEN` | - |
 | [bilibili.py](#bilibilipy) | B站多功能签到 | `BILIBILI_COOKIE` | `COIN_NUM`, `COIN_TYPE`, `SILVER2COIN`, `RECEIVE_VIP_PRIVILEGE` |
 | [v2ex.py](#v2expy) | V2EX 论坛自动签到 | `V2EX_COOKIE` | `V2EX_PROXY`, `V2EX_SSL_VERIFY` |
+| [nodeseek.py](#nodeseekpy) | NodeSeek 论坛自动签到 | `NODESEEK_COOKIE` | `NODESEEK_RANDOM` |
 
 ---
 
@@ -224,6 +225,35 @@ tasks:
     env:
       V2EX_COOKIE: "A2=xxx; PB3_SESSION=xxx"
       V2EX_PROXY: "http://127.0.0.1:7890"  # 可选
+```
+
+---
+
+### nodeseek.py
+
+**功能：**
+- 自动签到 NodeSeek 论坛
+- 获取鸡腿奖励信息
+- 支持随机/固定鸡腿模式
+
+**环境变量：**
+- `NODESEEK_COOKIE`: 登录 cookie（必需）
+- `NODESEEK_RANDOM`: 是否随机鸡腿，true/false（可选，默认 true）
+
+**依赖：**
+- `curl_cffi`: 用于模拟浏览器请求，绕过反爬虫
+
+**配置示例：**
+```yaml
+tasks:
+  - name: "NodeSeekCheckin"
+    schedule: "0 16 * * *"
+    script: "tasks/nodeseek.py"
+    description: "NodeSeek 每日签到"
+    enabled: true
+    env:
+      NODESEEK_COOKIE: "your_cookie_here"
+      NODESEEK_RANDOM: "true"  # 可选，true=随机鸡腿，false=固定5个鸡腿
 ```
 
 ---

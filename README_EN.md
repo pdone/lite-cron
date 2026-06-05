@@ -56,7 +56,10 @@ lite-cron/
 │   ├── smzdm.py                  # SMZDM check-in
 │   ├── tieba.py                  # Baidu Tieba check-in
 │   ├── fnclub.py                 # FNClub check-in
-│   └── aliyunpan.py              # Aliyun Drive check-in
+│   ├── aliyunpan.py              # Aliyun Drive check-in
+│   ├── bilibili.py               # Bilibili check-in
+│   ├── v2ex.py                   # V2EX check-in
+│   └── nodeseek.py               # NodeSeek check-in
 ├── 📁 data/                      # Persistent data directory
 └── 📁 logs/                      # Runtime logs directory
 ```
