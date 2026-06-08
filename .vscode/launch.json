@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "LiteCron Web",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/webapp.py",
+            "cwd": "${workspaceFolder}/src",
+            "console": "integratedTerminal",
+            "env": {
+                "WEBUI_PORT": "5000"
+            }
+        }
+    ]
+}

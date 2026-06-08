@@ -17,8 +17,8 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./config.yml:/app/config.yml:ro
-      - ./tasks:/app/tasks:ro
+      - ./config.yml:/app/config.yml
+      - ./tasks:/app/tasks
       - ./logs:/app/logs
       - ./data:/app/data
     networks:

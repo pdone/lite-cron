@@ -16,8 +16,7 @@ const elements = {
     taskList: document.getElementById('task-list'),
     taskCount: document.getElementById('task-count'),
     enabledCount: document.getElementById('enabled-count'),
-    updateTime: document.getElementById('update-time'),
-    
+
     // 按钮
     btnLogs: document.getElementById('btn-logs'),
     btnClean: document.getElementById('btn-clean'),
@@ -173,16 +172,11 @@ async function loadTasks() {
                     </td>
                 </tr>
             `;
-            // 更新时间
-            elements.updateTime.textContent = new Date().toLocaleString();
             return;
         }
         
         renderTasks();
-        
-        // 更新时间
-        elements.updateTime.textContent = new Date().toLocaleString();
-        
+
     } catch (error) {
         console.error('加载任务失败:', error);
         elements.taskList.innerHTML = `
@@ -250,16 +244,16 @@ function renderTasks() {
             </td>
             <td>
                 <div class="task-actions">
-                    <button class="btn-action btn-run" 
-                            onclick="runTask('${task.name}')" 
+                    <button class="btn-action btn-run"
+                            onclick="runTask('${task.name}')"
                             ${!task.enabled ? 'disabled' : ''}
                             title="立即执行">
-                        ▶️ 执行
+                        ▶ 执行
                     </button>
-                    <button class="btn-action btn-toggle" 
+                    <button class="btn-action btn-toggle ${task.enabled ? 'disable' : 'enable'}"
                             onclick="toggleTask('${task.name}', ${!task.enabled})"
                             title="${task.enabled ? '禁用' : '启用'}">
-                        ${task.enabled ? '⏸️' : '☑️'}
+                        ${task.enabled ? '⏸ 禁用' : '▶ 启用'}
                     </button>
                 </div>
             </td>

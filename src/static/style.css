@@ -127,18 +127,30 @@ body {
     gap: 12px;
 }
 
-.logo-icon {
-    font-size: 2rem;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
-}
-
 .logo h1 {
     font-size: 1.75rem;
     font-weight: 700;
+}
+
+.logo h1 a {
+    text-decoration: none;
     background: linear-gradient(135deg, var(--accent-primary), var(--accent-info));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    transition: opacity var(--transition-fast);
+}
+
+.logo h1 a:hover {
+    opacity: 0.8;
+}
+
+.version-badge {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: inherit;
+    font-weight: inherit;
 }
 
 .header-stats {
@@ -449,44 +461,97 @@ body {
 /* 操作按钮 */
 .task-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
 }
 
 .btn-action {
-    padding: 8px 14px;
+    padding: 6px 12px;
     font-size: 0.8125rem;
     border-radius: var(--radius-sm);
     border: none;
     cursor: pointer;
     transition: all var(--transition-fast);
     font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .btn-run {
-    background: var(--accent-primary);
+    background: linear-gradient(135deg, var(--accent-primary), #2563eb);
     color: var(--text-inverse);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-run::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.btn-run:hover::before {
+    left: 100%;
 }
 
 .btn-run:hover {
-    background: var(--accent-primary-hover);
-    transform: scale(1.05);
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.btn-run:disabled {
+    background: var(--text-muted);
+    box-shadow: none;
 }
 
 .btn-toggle {
-    background: var(--bg-primary);
+    background: var(--bg-card);
     color: var(--text-secondary);
     border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
 }
 
 .btn-toggle:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
+}
+
+.btn-toggle.enable {
+    color: var(--accent-success);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.btn-toggle.enable:hover {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: var(--accent-success);
+    color: var(--accent-success);
+}
+
+.btn-toggle.disable {
+    color: var(--accent-warning);
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+.btn-toggle.disable:hover {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: var(--accent-warning);
+    color: var(--accent-warning);
 }
 
 .btn-action:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none !important;
+    box-shadow: none !important;
 }
 
 /* 加载状态 */
@@ -523,6 +588,16 @@ body {
     text-align: center;
     color: var(--text-muted);
     font-size: 0.875rem;
+}
+
+.footer a {
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.footer a:hover {
+    color: var(--text-secondary);
+    text-decoration: underline;
 }
 
 /* 模态框 */
