@@ -64,18 +64,42 @@ def load_config() -> Optional[Dict[str, Any]]:
 
 
 def save_config(config: Dict[str, Any]) -> bool:
-    """保存 YAML 配置文件"""
+    """保存 YAML 配置文件，保留原始格式和注释"""
     try:
-        import yaml
+        from ruamel.yaml import YAML
+        ry = YAML()
+        ry.preserve_quotes = True
+
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            doc = ry.load(f)
+
+        _deep_merge(doc, config)
 
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(
-                config, f, allow_unicode=True, sort_keys=False, default_flow_style=False
-            )
+            ry.dump(doc, f)
+
         return True
     except Exception as e:
         log_error(f"保存配置失败: {e}")
         return False
+
+
+def _deep_merge(base, update):
+    """深度合并 update 到 base，保留 base 的 ruamel 格式对象"""
+    for key, value in update.items():
+        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+            _deep_merge(base[key], value)
+        elif key in base and isinstance(base[key], list) and isinstance(value, list):
+            for i, item in enumerate(value):
+                if i < len(base[key]):
+                    if isinstance(base[key][i], dict) and isinstance(item, dict):
+                        _deep_merge(base[key][i], item)
+                    else:
+                        base[key][i] = item
+                else:
+                    base[key].append(item)
+        else:
+            base[key] = value
 
 
 def get_container_status() -> Dict[str, Any]:
