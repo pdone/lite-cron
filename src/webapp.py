@@ -32,6 +32,18 @@ LOGS_DIR = PROJECT_ROOT / "logs"
 TASKS_DIR = PROJECT_ROOT / "tasks"
 TEMPLATE_DIR = PROJECT_ROOT / "template"
 STATIC_DIR = PROJECT_ROOT / "static"
+VERSION_FILE = PROJECT_ROOT / "VERSION"
+
+
+def get_app_version() -> str:
+    """从 VERSION 文件读取应用版本号"""
+    try:
+        return VERSION_FILE.read_text(encoding="utf-8").strip()
+    except Exception:
+        return "unknown"
+
+
+APP_VERSION = get_app_version()
 
 app = Flask(__name__)
 app.template_folder = str(TEMPLATE_DIR)
@@ -184,7 +196,7 @@ def format_size(size_bytes: int) -> str:
 @app.route("/")
 def index():
     """首页"""
-    return render_template("index.html")
+    return render_template("index.html", app_version=APP_VERSION)
 
 
 @app.route("/static/<path:filename>")
@@ -210,6 +222,7 @@ def api_status():
 
         return jsonify(
             {
+                "version": APP_VERSION,
                 "container": container_status,
                 "tasks": {
                     "total": task_count,

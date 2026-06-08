@@ -631,6 +631,14 @@ def main() -> int:
         bili = BiliBili(check_item=config)
         result = bili.main()
         log_info("任务结果:\n" + result)
+
+        # 检查结果中是否有失败项，排除"今日已登录"等合法的成功消息
+        failure_keywords = ["失败", "未配置", "无效"]
+        check_line = result.replace("今日已登录", "")
+        has_failure = any(kw in check_line for kw in failure_keywords)
+        if has_failure:
+            log_warning("部分任务执行失败")
+            return 1
         return 0
     except Exception as e:
         log_error(f"任务执行异常: {e}")

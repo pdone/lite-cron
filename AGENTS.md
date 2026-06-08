@@ -290,6 +290,11 @@ python manage.py tasklogs      # Task execution logs
 - Emoji markers in logs: 🚀 start, ✅ success, ❌ error, ⚠️ warning, 🏁 end
 - No linter/formatter configured - keep code clean manually
 
+## Git Commit Convention
+
+- Commit message prefix 使用 `feat`、`fix`、`docs` 等，但 **`feat` 后不加冒号**
+- 示例：`feat 添加新功能`（正确），`feat: 添加新功能`（错误）
+
 ## References
 
 - [Crontab Guru](https://crontab.guru/) - Cron expression validator
