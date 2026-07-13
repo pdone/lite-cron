@@ -10,8 +10,9 @@ tasks:
     description: "iKuuu签到"
     enabled: true
     env:
-      MY_EMAIL: "your_email"
-      MY_PWD: "your_password"
+      IKUUU_COOKIE: "your_cookie_here"          # 优先使用 Cookie 登录
+      # MY_EMAIL: "your_email"                   # Cookie 失效时回退使用
+      # MY_PWD: "your_password"                  # Cookie 失效时回退使用
 
   - name: "PTTime"
     schedule: "0 3 * * *"
