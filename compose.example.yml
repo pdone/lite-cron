@@ -18,9 +18,9 @@ services:
       - "5000:5000"
     volumes:
       - ./config.yml:/app/config.yml
-      - ./tasks:/app/tasks
+      # - ./tasks:/app/tasks          # 内置脚本不建议挂载到主机 除非有明确需求需要修改
       - ./logs:/app/logs
-      - ./data:/app/data
+      - ./data:/app/data              # 自定义脚本放到这里 同时修改config.yml中的脚本路径
     networks:
       - lite-cron
 
