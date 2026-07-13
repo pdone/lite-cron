@@ -88,6 +88,15 @@ tasks:
       NODESEEK_RANDOM: "true"                # 可选，是否随机鸡腿: true/false，默认true
       # NODESEEK_PROXY: "http://127.0.0.1:7890"  # 可选，代理服务器地址
 
+  - name: "ZhuTiX"
+    schedule: "0 11 * * *"
+    script: "tasks/zhutix.py"
+    description: "致美化网站签到"
+    enabled: true
+    env:
+      ZHUTIX_COOKIE: "your_zhutix_cookie_here"
+      # ZHUTIX_PROXY: "http://127.0.0.1:7890"  # 可选，代理服务器地址
+
 # 通知配置
 notify:
   # 任务失败时发送通知
