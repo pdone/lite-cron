@@ -3,13 +3,14 @@
 iKuuu 自动签到任务
 
 功能：
-- 自动登录 ikuuu.org
+- 自动登录 ikuuu.win Cookie 和账号密码两种方式）
 - 执行每日签到
 - 获取剩余流量信息
 
 环境变量：
-- MY_EMAIL: 登录邮箱
-- MY_PWD: 登录密码
+- IKUUU_COOKIE: 登录 Cookie（优先使用，格式: key1=value1; key2=value2）
+- MY_EMAIL: 登录邮箱（Cookie 失效时回退使用）
+- MY_PWD: 登录密码（Cookie 失效时回退使用）
 """
 
 import os
@@ -25,16 +26,16 @@ import base64
 from datetime import datetime
 
 # 配置常量
-LOGIN_URL = "https://ikuuu.org/auth/login"
-CHECK_URL = "https://ikuuu.org/user/checkin"
-INFO_URL = "https://ikuuu.org/user"
+LOGIN_URL = "https://ikuuu.win/auth/login"
+CHECK_URL = "https://ikuuu.win/user/checkin"
+INFO_URL = "https://ikuuu.win/user"
 
 HEADERS = {
     "accept": "application/json, text/javascript, */*; q=0.01",
     "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
     "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "origin": "https://ikuuu.org",
-    "referer": "https://ikuuu.org/auth/login",
+    "origin": "https://ikuuu.win",
+    "referer": "https://ikuuu.win/auth/login",
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "x-requested-with": "XMLHttpRequest",
 }
@@ -45,21 +46,92 @@ def get_credentials() -> tuple:
     从环境变量获取登录凭据
 
     Returns:
-        tuple: (邮箱列表, 密码列表)
+        tuple: (cookie列表, 邮箱列表, 密码列表)
     """
+    cookie = os.environ.get("IKUUU_COOKIE")
     email = os.environ.get("MY_EMAIL")
     password = os.environ.get("MY_PWD")
 
-    if not email or not password:
-        log_error("错误: 未配置环境变量 MY_EMAIL 或 MY_PWD")
-        return [], []
+    cookies = [cookie] if cookie else []
+    emails = [email] if email else []
+    passwords = [password] if password else []
 
-    return [email], [password]
+    if not cookies and not (emails and passwords):
+        log_error("错误: 请配置环境变量 IKUUU_COOKIE，或同时配置 MY_EMAIL 和 MY_PWD")
+        return [], [], []
+
+    return cookies, emails, passwords
+
+
+def verify_cookie(session: requests.Session, cookie: str) -> bool:
+    """
+    验证 Cookie 是否有效
+
+    Args:
+        session: requests 会话对象
+        cookie: 登录 Cookie
+
+    Returns:
+        bool: Cookie 是否有效
+    """
+    try:
+        log_info("正在验证 Cookie 有效性...")
+        headers = HEADERS.copy()
+        headers["Cookie"] = cookie
+
+        response = session.get(url=INFO_URL, headers=headers, timeout=30, allow_redirects=False)
+
+        if response.status_code == 200:
+            if "登录" in response.text and "auth/login" in response.text:
+                log_warning("Cookie 已失效，需要重新登录")
+                return False
+            log_success("Cookie 验证通过")
+            return True
+        elif response.status_code in (301, 302):
+            redirect_url = response.headers.get("Location", "")
+            if "auth/login" in redirect_url:
+                log_warning("Cookie 已失效，跳转到登录页")
+                return False
+            log_success("Cookie 验证通过")
+            return True
+        else:
+            log_warning(f"Cookie 验证返回状态码: {response.status_code}，尝试继续使用")
+            return True
+
+    except requests.exceptions.RequestException as e:
+        log_warning(f"Cookie 验证请求失败: {e}，尝试继续使用")
+        return True
+
+
+def login_with_cookie(session: requests.Session, cookie: str) -> bool:
+    """
+    使用 Cookie 登录
+
+    Args:
+        session: requests 会话对象
+        cookie: 登录 Cookie
+
+    Returns:
+        bool: 登录是否成功
+    """
+    try:
+        log_info("使用 Cookie 方式登录...")
+        headers = HEADERS.copy()
+        headers["Cookie"] = cookie
+        session.headers.update(headers)
+
+        if verify_cookie(session, cookie):
+            return True
+        return False
+
+    except Exception as e:
+        log_error(f"Cookie 登录异常: {e}")
+        return False
 
 
 def login(session: requests.Session, email: str, password: str) -> bool:
     """
-    登录 ikuuu
+    使用账号密码登录 ikuuu
 
     Args:
         session: requests 会话对象
@@ -70,7 +142,7 @@ def login(session: requests.Session, email: str, password: str) -> bool:
          bool: 登录是否成功
     """
     try:
-        log_info(f"[{email}] 正在登录...")
+        log_info(f"[{email}] 使用账号密码登录...")
         data = {"email": email, "passwd": password}
         response = session.post(url=LOGIN_URL, headers=HEADERS, data=data, timeout=30)
         response.raise_for_status()
@@ -79,10 +151,10 @@ def login(session: requests.Session, email: str, password: str) -> bool:
         msg = result.get("msg", "未知响应")
         log_info(f"{msg}")
 
-        # 检查登录是否成功（根据响应判断）
         if "成功" in msg or "success" in msg.lower():
+            log_success("账号密码登录成功")
             return True
-        return True  # 即使msg不包含成功字样，也尝试继续
+        return True
 
     except requests.exceptions.RequestException as e:
         log_error(f"登录请求失败: {e}")
@@ -178,34 +250,52 @@ def get_traffic_info(session: requests.Session) -> str:
         return error_msg
 
 
-def process_account(email: str, password: str) -> bool:
+def process_account(cookie: str = None, email: str = None, password: str = None) -> bool:
     """
-    处理单个账号的签到流程
+    处理单个账号的签到流程，优先使用 Cookie 登录，失败时回退到账号密码
 
     Args:
-        email: 邮箱
-        password: 密码
+        cookie: 登录 Cookie（可选）
+        email: 邮箱（可选，Cookie 失效时回退使用）
+        password: 密码（可选，Cookie 失效时回退使用）
 
     Returns:
         bool: 是否成功
     """
     session = requests.Session()
+    account_label = email if email else "cookie账号"
 
     try:
-        # 登录
-        if not login(session, email, password):
-            return False
+        logged_in = False
 
-        # 签到
-        checkin_msg = checkin(session)
+        if cookie:
+            log_info(f"[{account_label}] 尝试使用 Cookie 登录...")
+            if login_with_cookie(session, cookie):
+                try:
+                    checkin(session)
+                    get_traffic_info(session)
+                    log_success(f"[{account_label}] Cookie 登录并签到成功")
+                    return True
+                except Exception as e:
+                    log_warning(f"[{account_label}] Cookie 签到失败: {e}，尝试回退到账号密码登录")
+                    session = requests.Session()
 
-        # 获取流量信息
-        traffic_info = get_traffic_info(session)
+        if email and password:
+            log_info(f"[{account_label}] 使用账号密码登录...")
+            if login(session, email, password):
+                checkin(session)
+                get_traffic_info(session)
+                log_success(f"[{account_label}] 账号密码登录并签到成功")
+                return True
+            else:
+                log_error(f"[{account_label}] 账号密码登录失败")
+                return False
 
-        return True
+        log_error(f"[{account_label}] 没有可用的登录方式")
+        return False
 
     except Exception as e:
-        log_error(f"处理账号时发生错误: {e}")
+        log_error(f"[{account_label}] 处理账号时发生错误: {e}")
         return False
 
 
@@ -216,35 +306,30 @@ def main() -> int:
     Returns:
         int: 退出码 (0=成功, 1=失败)
     """
-    # start_time = datetime.now()
-    # start_time_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
-
     log_info("iKuuu 签到任务开始")
 
-    # 获取凭据
-    emails, passwords = get_credentials()
+    cookies, emails, passwords = get_credentials()
 
-    if not emails:
+    if not cookies and not emails:
         log_warning("任务终止: 未配置有效凭据")
         return 1
 
-    # 处理每个账号
     success_count = 0
     fail_count = 0
 
-    for email, password in zip(emails, passwords):
-        if process_account(email, password):
+    max_accounts = max(len(cookies), len(emails))
+
+    for i in range(max_accounts):
+        cookie = cookies[i] if i < len(cookies) else None
+        email = emails[i] if i < len(emails) else None
+        password = passwords[i] if i < len(passwords) else None
+
+        if process_account(cookie=cookie, email=email, password=password):
             success_count += 1
         else:
             fail_count += 1
 
-    # 记录结束时间
-    # end_time = datetime.now()
-    # end_time_str = end_time.strftime('%Y-%m-%d %H:%M:%S')
-    # duration = (end_time - start_time).total_seconds()
-
-    # 汇总结果
-    # print(f'✅ 任务完成: 成功 {success_count} 个, 失败 {fail_count} 个')
+    log_info(f"任务完成: 成功 {success_count} 个, 失败 {fail_count} 个")
 
     if fail_count > 0:
         return 1
