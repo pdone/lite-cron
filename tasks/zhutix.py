@@ -29,7 +29,6 @@ from logger import log_info, log_success, log_error, log_warning, log_debug
 BASE_URL = "https://zhutix.com"
 MISSION_URL = f"{BASE_URL}/mission/"
 USER_MISSION_API = f"{BASE_URL}/wp-json/b2/v1/userMission"
-GET_USER_MISSION_API = f"{BASE_URL}/wp-json/b2/v1/getUserMission"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -184,8 +183,21 @@ def sign(cookie: str, proxy: Optional[str] = None) -> bool:
                         log_success("签到成功！")
                     return True
 
-            log_info(f"签到响应: {str(res_data)[:200]}")
-            return True
+            # 响应不是预期的 dict 结构，可能是 B2 主题返回的简单状态码
+            # 致美化 userMission 接口状态码含义：
+            #   1 → 未到签到时间（签到周期未重置）
+            #   3 → 今日已签到
+            # 这两种状态都不算失败，只是无法获得新的签到奖励
+            if res_data == 3:
+                log_info("今日已签到，跳过")
+                return True
+            if res_data == 1:
+                log_warning("未到签到时间（签到周期尚未重置），跳过")
+                return True
+
+            # 其他未知响应，按失败处理以便及时发现异常
+            log_warning(f"签到响应格式异常，可能未真正签到: {str(res_data)[:200]}")
+            return False
 
         else:
             log_error(f"签到失败，服务器返回状态码: {response.status_code}")
@@ -198,46 +210,6 @@ def sign(cookie: str, proxy: Optional[str] = None) -> bool:
     except Exception as e:
         log_error(f"签到异常: {str(e)}")
         return False
-
-
-def get_user_mission(cookie: str, proxy: Optional[str] = None) -> dict:
-    """
-    获取用户签到信息
-
-    Args:
-        cookie: 登录 cookie
-        proxy: 代理地址（可选）
-
-    Returns:
-        dict: 用户签到信息
-    """
-    try:
-        from curl_cffi import requests as curl_requests
-
-        headers = build_auth_headers(cookie)
-
-        proxies = None
-        if proxy:
-            proxies = {"http": proxy, "https": proxy}
-
-        log_info("获取签到信息...")
-
-        response = curl_requests.post(
-            GET_USER_MISSION_API,
-            headers=headers,
-            impersonate="chrome110",
-            timeout=15,
-            proxies=proxies,
-        )
-
-        if response.status_code == 200:
-            res_data = response.json()
-            return res_data if isinstance(res_data, dict) else {}
-        return {}
-
-    except Exception as e:
-        log_warning(f"获取签到信息失败: {str(e)}")
-        return {}
 
 
 def main() -> int:
@@ -257,6 +229,7 @@ def main() -> int:
 
     proxy = parse_proxy(proxy_url) if proxy_url else None
 
+    # 直接调用签到接口，sign() 内部会处理已签到(3)/未到时间(1)等状态
     success = sign(cookie, proxy)
 
     if success:
