@@ -5,12 +5,15 @@ V2EX 论坛自动签到任务
 功能：
 - 自动登录 V2EX 论坛
 - 执行每日签到获取金币
-- 获取用户信息（用户名、余额、连续签到天数）
+- 获取用户信息（用户名、余额）
 
 环境变量：
 - V2EX_COOKIE: V2EX 登录 Cookie（必需，格式: key1=value1; key2=value2）
 - V2EX_PROXY: 代理服务器地址（可选，如 http://127.0.0.1:7890）
 - V2EX_SSL_VERIFY: 是否验证 SSL 证书（可选，true/false，默认false）
+
+依赖：
+- curl_cffi: 用于模拟浏览器请求，绕过 Cloudflare 反爬虫
 """
 
 import os
@@ -20,13 +23,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from logger import log_info, log_success, log_error, log_warning, log_debug
 
 import re
-import requests
-import urllib3
 from datetime import datetime
 from typing import Dict, List, Optional
-
-# 禁用 SSL 警告
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 配置常量
 BASE_URL = "https://www.v2ex.com"
@@ -36,7 +34,7 @@ BALANCE_URL = f"{BASE_URL}/balance"
 HEADERS = {
     "user-agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.66"
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     ),
     "accept": (
         "text/html,application/xhtml+xml,application/xml;q=0.9,"
@@ -60,14 +58,17 @@ class V2ex:
         self.check_item = check_item
         self.session = None
 
-    def _init_session(self) -> requests.Session:
-        """初始化请求会话
+    def _init_session(self):
+        """初始化请求会话（使用 curl_cffi 模拟 Chrome 浏览器）
 
         Returns:
-            requests.Session: 配置好的会话对象
+            curl_cffi.Session: 配置好的会话对象；Cookie 未配置时返回 None
         """
-        session = requests.session()
-        session.headers.update(HEADERS)
+        try:
+            from curl_cffi import requests as curl_requests
+        except ImportError:
+            log_error("缺少依赖: curl_cffi，请执行 pip install curl_cffi")
+            return None
 
         # 解析 Cookie
         cookie_str = self.check_item.get("cookie", "")
@@ -80,13 +81,20 @@ class V2ex:
                 key, value = item.split("=", 1)
                 cookies[key] = value
 
-        requests.utils.add_dict_to_cookiejar(session.cookies, cookies)
-
         # 配置代理
         proxy = self.check_item.get("proxy", "")
+        proxies = None
         if proxy:
-            session.proxies.update({"http": proxy, "https": proxy})
+            proxies = {"http": proxy, "https": proxy}
             log_info(f"使用代理: {proxy}")
+
+        # 创建 curl_cffi 会话，模拟 Chrome 浏览器以绕过 Cloudflare
+        session = curl_requests.Session(
+            headers=HEADERS,
+            cookies=cookies,
+            proxies=proxies,
+            impersonate="chrome120",
+        )
 
         return session
 
@@ -105,6 +113,20 @@ class V2ex:
         )
         urls = re.findall(pattern=pattern, string=html)
         return urls[0] if urls else None
+
+    def _is_already_signed(self, html: str) -> bool:
+        """检测页面是否表示今日已签到
+
+        已签到时 V2EX 显示"每日登录奖励已领取"，按钮变为"查看我的账户余额"。
+
+        Args:
+            html: 签到页面 HTML 内容
+
+        Returns:
+            bool: True 表示今日已签到
+        """
+        markers = ("每日登录奖励已领取", "已连续登录", "查看我的账户余额")
+        return any(marker in html for marker in markers)
 
     def _parse_user_info(self, html: str) -> Dict[str, str]:
         """从页面解析用户信息
@@ -140,23 +162,6 @@ class V2ex:
 
         return info
 
-    def _parse_consecutive_days(self, html: str) -> str:
-        """解析连续签到天数
-
-        Args:
-            html: 页面 HTML 内容
-
-        Returns:
-            str: 连续签到天数信息
-        """
-        days_match = re.findall(
-            pattern=r"<div class=\"cell\">(.*?)天</div>",
-            string=html,
-        )
-        if days_match:
-            return days_match[0] + "天"
-        return "获取连续签到天数失败"
-
     def sign(self) -> List[Dict[str, str]]:
         """执行签到
 
@@ -169,19 +174,24 @@ class V2ex:
         try:
             # 访问签到页面
             log_info("访问签到页面...")
-            response = self.session.get(url=DAILY_URL, verify=ssl_verify, timeout=30)
+            response = self.session.get(url=DAILY_URL, verify=ssl_verify, timeout=20)
             response.raise_for_status()
 
-            # 获取签到 URL
-            once_url = self._parse_once_token(response.text)
+            # 优先检测是否已签到（无论按钮是否存在，只要页面含已签到标记就跳过）
+            if self._is_already_signed(response.text):
+                log_info("今日已签到，跳过签到步骤")
+                already_signed = True
+            else:
+                # 未签到，获取签到 URL
+                once_url = self._parse_once_token(response.text)
+                if once_url is None:
+                    log_warning("无法获取签到链接，Cookie 可能已过期")
+                    msg.append({"name": "签到状态", "value": "Cookie 可能已过期"})
+                    return msg
+                already_signed = False
 
-            if once_url is None:
-                log_warning("无法获取签到链接，Cookie 可能已过期")
-                msg.append({"name": "签到状态", "value": "Cookie 可能已过期"})
-                return msg
-
-            # 执行签到
-            if once_url != "/balance":
+            # 执行签到（已签到则跳过）
+            if not already_signed:
                 log_info("执行签到...")
                 once_token = once_url.split("=")[-1]
                 sign_headers = {"Referer": DAILY_URL}
@@ -190,48 +200,34 @@ class V2ex:
                     verify=ssl_verify,
                     headers=sign_headers,
                     params={"once": once_token},
-                    timeout=30,
+                    timeout=20,
                 )
                 sign_response.raise_for_status()
                 log_success("签到请求已发送")
-            else:
-                log_info("今日已签到")
 
             # 获取用户信息
             log_info("获取用户信息...")
-            balance_response = self.session.get(url=BALANCE_URL, verify=ssl_verify, timeout=30)
+            balance_response = self.session.get(url=BALANCE_URL, verify=ssl_verify, timeout=20)
             balance_response.raise_for_status()
             user_info = self._parse_user_info(balance_response.text)
-
-            # 获取连续签到天数
-            daily_response = self.session.get(url=DAILY_URL, verify=ssl_verify, timeout=30)
-            daily_response.raise_for_status()
-            consecutive_days = self._parse_consecutive_days(daily_response.text)
 
             # 构建结果
             msg.append({"name": "帐号信息", "value": user_info["username"]})
             msg.append({"name": "今日签到", "value": user_info["today_reward"]})
             msg.append({"name": "帐号余额", "value": user_info["balance"]})
-            msg.append({"name": "签到天数", "value": consecutive_days})
 
             log_success("签到完成")
             return msg
 
-        except requests.exceptions.ProxyError as e:
-            log_error(f"代理连接失败: {e}")
-            msg.append({"name": "签到状态", "value": f"代理错误: {e}"})
-            return msg
-        except requests.exceptions.Timeout:
-            log_error("请求超时")
-            msg.append({"name": "签到状态", "value": "请求超时"})
-            return msg
-        except requests.exceptions.RequestException as e:
-            log_error(f"请求失败: {e}")
-            msg.append({"name": "签到状态", "value": f"请求失败: {e}"})
-            return msg
         except Exception as e:
-            log_error(f"签到异常: {e}")
-            msg.append({"name": "签到状态", "value": f"异常: {e}"})
+            err_str = str(e)
+            log_error(f"签到异常: {err_str}")
+            if "proxy" in err_str.lower() or "connect" in err_str.lower():
+                msg.append({"name": "签到状态", "value": f"代理错误: {err_str}"})
+            elif "timeout" in err_str.lower() or "timed out" in err_str.lower():
+                msg.append({"name": "签到状态", "value": "请求超时"})
+            else:
+                msg.append({"name": "签到状态", "value": f"请求失败: {err_str}"})
             return msg
 
     def main(self) -> str:

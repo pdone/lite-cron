@@ -3,6 +3,12 @@
 # 特殊值: * 表示任意值
 # 示例: "*/5 * * * *" 表示每5分钟执行一次
 
+# 共享代理地址（YAML 锚点）
+# 用法: 在需要代理的任务 env 中写 `任务名_PROXY: *proxy` 引用此地址
+# 修改下方地址即可统一更新所有引用处的代理，无需逐个任务修改
+# 不需要代理时: 保持各任务的 *_PROXY 行为注释状态即可（不要删除此 proxy 定义，否则引用会解析失败）
+proxy: &proxy "http://127.0.0.1:7890"
+
 tasks:
   - name: "iKuuu"
     schedule: "0 2 * * *"
@@ -22,7 +28,7 @@ tasks:
     env:
       PTTIME_COOKIE: "your_cookie_here"
       PTTIME_UID: "your_uid_here"
-      # PTTIME_PROXY: "optional_proxy_here"  # 可选
+      # PTTIME_PROXY: *proxy  # 可选，引用顶部 proxy 锚点
 
   - name: "SMZDM"
     schedule: "0 4 * * *"
@@ -64,10 +70,12 @@ tasks:
     env:
       BILIBILI_COOKIE: "SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
       # COIN_NUM: "5"                    # 每日投币数量，默认5
-      # COIN_TYPE: "1"                   # 投币类型: 1=关注用户视频，其他=随机视频，默认1
-      # SILVER2COIN: "false"             # 是否兑换银瓜子为硬币: true/false，默认false
-      # RECEIVE_VIP_PRIVILEGE: "false"   # 是否领取大会员权益: true/false，默认false（非大会员不生效）
+      # SKIP_COIN: "false"               # 是否跳过投币任务: true/false，默认false（节省硬币）
       # SKIP_SHARE: "false"              # 是否跳过分享任务: true/false，默认false
+      # SILVER2COIN: "false"             # 是否兑换银瓜子为硬币: true/false，默认false
+      # RECEIVE_VIP_PRIVILEGE: "false"   # 是否领取大会员权益: true/false，默认false
+      # LIVE_ROOM_DANMU: "30858592,22637261"  # 可选，直播间弹幕签到 room_id，多个用逗号分隔
+      # LIVE_DANMU_MSG: "签到"                 # 可选，弹幕内容，默认"签到"
 
   - name: "V2EX"
     schedule: "0 9 * * *"
@@ -76,7 +84,7 @@ tasks:
     enabled: true
     env:
       V2EX_COOKIE: "your_v2ex_cookie_here"
-      # V2EX_PROXY: "http://127.0.0.1:7890"  # 可选，代理服务器地址
+      # V2EX_PROXY: *proxy  # 可选，引用顶部 proxy 锚点
       # V2EX_SSL_VERIFY: "false"             # 可选，是否验证SSL证书，默认false
 
   - name: "NodeSeek"
@@ -87,7 +95,7 @@ tasks:
     env:
       NODESEEK_COOKIE: "your_nodeseek_cookie_here"
       NODESEEK_RANDOM: "true"                # 可选，是否随机鸡腿: true/false，默认true
-      # NODESEEK_PROXY: "http://127.0.0.1:7890"  # 可选，代理服务器地址
+      # NODESEEK_PROXY: *proxy  # 可选，引用顶部 proxy 锚点
 
   - name: "ZhuTiX"
     schedule: "0 11 * * *"
@@ -96,7 +104,7 @@ tasks:
     enabled: true
     env:
       ZHUTIX_COOKIE: "your_zhutix_cookie_here"
-      # ZHUTIX_PROXY: "http://127.0.0.1:7890"  # 可选，代理服务器地址
+      # ZHUTIX_PROXY: *proxy  # 可选，引用顶部 proxy 锚点
 
 # 通知配置
 notify:

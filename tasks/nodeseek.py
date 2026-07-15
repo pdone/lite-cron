@@ -6,6 +6,7 @@ NodeSeek 论坛自动签到任务
 - 自动签到 NodeSeek 论坛
 - 获取鸡腿奖励信息
 - 支持随机/固定鸡腿模式
+- 已签到时自动识别并跳过
 
 环境变量：
 - NODESEEK_COOKIE: 登录 cookie（必需）
@@ -23,7 +24,6 @@ from typing import Optional
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from logger import log_info, log_success, log_error, log_warning, log_debug
 
-from datetime import datetime
 from urllib.parse import urlparse
 
 # 配置常量
@@ -36,6 +36,9 @@ HEADERS = {
     "Referer": "https://www.nodeseek.com/board",
     "Content-Type": "application/json",
 }
+
+# 已签到特征关键词（message 中包含任一即判定为已签到）
+SIGNED_KEYWORDS = ["已签到", "已完成签到", "already"]
 
 
 def get_credentials() -> tuple:
@@ -50,12 +53,12 @@ def get_credentials() -> tuple:
     proxy_url = os.environ.get("NODESEEK_PROXY")
 
     if not cookie:
-        log_error("错误: 未配置环境变量 NODESEEK_COOKIE")
+        log_error("❌ 错误: 未配置环境变量 NODESEEK_COOKIE")
         return None, None, None
 
     # 验证 random_mode 值
     if random_mode not in ("true", "false"):
-        log_warning(f"无效的 NODESEEK_RANDOM 值: {random_mode}，使用默认值 true")
+        log_warning(f"⚠️ 无效的 NODESEEK_RANDOM 值: {random_mode}，使用默认值 true")
         random_mode = "true"
 
     return cookie, random_mode, proxy_url
@@ -80,17 +83,36 @@ def parse_proxy(proxy_url: Optional[str]) -> Optional[str]:
             proxy_url = f"http://{proxy_url}"
 
         parsed = urlparse(proxy_url)
-        log_info(f"使用代理: {parsed.hostname}:{parsed.port}")
+        log_info(f"🔗 使用代理: {parsed.hostname}:{parsed.port}")
         return proxy_url
 
     except Exception as e:
-        log_warning(f"代理解析失败: {e}")
+        log_warning(f"⚠️ 代理解析失败: {e}")
         return None
+
+
+def is_already_signed(message: str) -> bool:
+    """
+    判断 message 是否表示今日已签到
+
+    Args:
+        message: API 返回的 message 字段
+
+    Returns:
+        bool: True 表示已签到
+    """
+    message_lower = message.lower()
+    return any(kw in message or kw in message_lower for kw in SIGNED_KEYWORDS)
 
 
 def sign(cookie: str, random_mode: str, proxy: Optional[str] = None) -> bool:
     """
     执行签到
+
+    NodeSeek 签到 API 特性：
+    - 签到成功: 200 + {"success": true, "gain": N, "current": N}
+    - 今日已签到: 500 + {"success": false, "message": "今天已完成签到，请勿重复操作"}
+    - 其他失败: 非 200 状态码
 
     Args:
         cookie: 登录 cookie
@@ -98,56 +120,62 @@ def sign(cookie: str, random_mode: str, proxy: Optional[str] = None) -> bool:
         proxy: 代理地址（可选）
 
     Returns:
-        bool: 签到是否成功
+        bool: 签到是否成功（已签到视为成功）
     """
     try:
-        # 导入 curl_cffi（延迟导入，避免未安装时影响其他任务）
         from curl_cffi import requests as curl_requests
 
-        # 构建请求头
         headers = HEADERS.copy()
         headers["Cookie"] = cookie
 
-        # 构建 URL
         url = f"{SIGN_URL}?random={random_mode}"
 
-        log_info(f"正在签到... (随机模式: {random_mode})")
+        log_info(f"🚀 正在签到... (随机模式: {random_mode})")
 
-        # 设置代理
-        proxies = None
-        if proxy:
-            proxies = {"http": proxy, "https": proxy}
+        proxies = {"http": proxy, "https": proxy} if proxy else None
 
-        # 使用 curl_cffi 模拟 Chrome 浏览器
         response = curl_requests.post(
             url, headers=headers, impersonate="chrome110", timeout=15, proxies=proxies
         )
 
-        if response.status_code == 200:
-            res_data = response.json()
-            message = res_data.get("message", "")
-            success = res_data.get("success", False)
+        status_code = response.status_code
+        log_info(f"响应状态码: {status_code}")
 
-            if success:
+        # 尝试解析 JSON 响应体（无论状态码如何，NodeSeek 可能在 500 时也返回 JSON）
+        res_data = None
+        try:
+            res_data = response.json()
+            log_info(f"响应 JSON: {res_data}")
+        except Exception:
+            log_warning(f"⚠️ 响应非 JSON 格式: {response.text[:200]}")
+
+        # 处理已签到的情况（状态码 500 但 message 包含已签到关键词）
+        if res_data and is_already_signed(res_data.get("message", "")):
+            log_success(f"✅ 今日已签到，跳过: {res_data.get('message', '')}")
+            return True
+
+        # 正常签到成功
+        if status_code == 200 and res_data:
+            if res_data.get("success", False):
                 gain = res_data.get("gain", 0)
                 current = res_data.get("current", 0)
-                log_success(f"签到成功！获得 {gain} 鸡腿，当前共有 {current} 鸡腿")
+                log_success(f"✅ 签到成功！获得 {gain} 鸡腿，当前共有 {current} 鸡腿")
                 return True
             else:
-                log_info(f"签到提示: {message}")
-                # 已签到也算成功
-                if "已签到" in message or "already" in message.lower():
-                    return True
+                message = res_data.get("message", "")
+                log_warning(f"⚠️ 签到未成功: {message}")
                 return False
-        else:
-            log_error(f"签到失败，服务器返回状态码: {response.status_code}")
-            return False
+
+        # 其他错误
+        message = res_data.get("message", "") if res_data else response.text[:200]
+        log_error(f"❌ 签到失败，状态码: {status_code}, 响应: {message}")
+        return False
 
     except ImportError:
-        log_error("缺少依赖: curl_cffi，请执行 pip install curl_cffi")
+        log_error("❌ 缺少依赖: curl_cffi，请执行 pip install curl_cffi")
         return False
     except Exception as e:
-        log_error(f"签到异常: {str(e)}")
+        log_error(f"❌ 签到异常: {str(e)}")
         return False
 
 
@@ -158,26 +186,26 @@ def main() -> int:
     Returns:
         int: 退出码 (0=成功, 1=失败)
     """
-    log_info("NodeSeek 签到任务开始")
+    log_info("🚀 NodeSeek 签到任务开始")
 
     # 获取配置
     cookie, random_mode, proxy_url = get_credentials()
 
     if not cookie:
-        log_warning("任务终止: 未配置有效凭据")
+        log_warning("⚠️ 任务终止: 未配置有效凭据")
         return 1
 
     # 解析代理
     proxy = parse_proxy(proxy_url) if proxy_url else None
 
-    # 执行签到
+    # 执行签到（API 不支持 GET 查询，直接 POST，已签到会返回特定 message）
     success = sign(cookie, random_mode, proxy)
 
     # 汇总结果
     if success:
-        log_success("任务完成")
+        log_success("🏁 任务完成")
     else:
-        log_error("任务失败")
+        log_error("🏁 任务失败")
 
     return 0 if success else 1
 

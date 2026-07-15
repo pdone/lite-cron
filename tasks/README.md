@@ -12,9 +12,12 @@
 | [tieba.py](#tiebapy) | 百度贴吧自动签到 | `TIEBA_COOKIE` | - |
 | [fnclub.py](#fnclubpy) | 飞牛Nas论坛自动签到 | `FNNAS_COOKIE` | - |
 | [aliyunpan.py](#aliyunpanpy) | 阿里云盘自动签到 | `ALIYUN_REFRESH_TOKEN` | - |
-| [bilibili.py](#bilibilipy) | B站多功能签到 | `BILIBILI_COOKIE` | `COIN_NUM`, `COIN_TYPE`, `SILVER2COIN`, `RECEIVE_VIP_PRIVILEGE`, `SKIP_SHARE` |
+| [bilibili.py](#bilibilipy) | B站多功能签到 | `BILIBILI_COOKIE` | `COIN_NUM`, `SKIP_COIN`, `SKIP_SHARE`, `SILVER2COIN`, `RECEIVE_VIP_PRIVILEGE`, `LIVE_ROOM_DANMU`, `LIVE_DANMU_MSG` |
 | [v2ex.py](#v2expy) | V2EX 论坛自动签到 | `V2EX_COOKIE` | `V2EX_PROXY`, `V2EX_SSL_VERIFY` |
 | [nodeseek.py](#nodeseekpy) | NodeSeek 论坛自动签到 | `NODESEEK_COOKIE` | `NODESEEK_RANDOM`, `NODESEEK_PROXY` |
+| [zhutix.py](#zhutixpy) | 致美化网站自动签到 | `ZHUTIX_COOKIE` | `ZHUTIX_PROXY` |
+
+> 💡 **代理共享**：多个脚本需要使用同一代理时，可在 `config.yml` 顶部用 YAML 锚点声明一次，下方任务通过 `*proxy` 引用。详见 [共享代理配置](#共享代理配置)。
 
 ---
 
@@ -69,7 +72,7 @@ tasks:
     env:
       PTTIME_COOKIE: "your_cookie_here"
       PTTIME_UID: "12345"
-      PTTIME_PROXY: "http://127.0.0.1:7890"  # 可选
+      PTTIME_PROXY: *proxy  # 引用共享代理（可选）
 ```
 
 ---
@@ -169,37 +172,51 @@ tasks:
 ### bilibili.py
 
 **功能：**
-- B站漫画签到
-- B站直播签到
-- 视频投币任务
-- 观看视频任务
-- 分享视频任务
-- 银瓜子换硬币
-- 领取大会员权益
+- 登录奖励（+5 EXP）
+- 观看视频任务（+5 EXP，使用 heartbeat 心跳上报）
+- 分享视频任务（+5 EXP）
+- 投币任务（每枚 +10 EXP，最多 5 枚 = 50 EXP）
+- 直播间弹幕签到（可选，发送弹幕完成直播任务）
+- 银瓜子换硬币（可选）
+- 领取大会员权益（可选，基于 vipStatus 判定）
+
+**实现要点：**
+- 从 `BILIBILI_COOKIE` 中提取 `SESSDATA` 和 `bili_jct` 双字段独立使用，兼容 `;` 和 `; ` 两种分隔符，规避 cookie 字符串分隔符差异导致的 CSRF 解析失败问题
+- 通过 `/x/member/web/exp/reward` 预检查任务状态，已完成任务自动跳过
+- 观看任务改用 popular 接口获取视频（含真实 cid）+ heartbeat 心跳上报
+- 大会员判定基于 `vipStatus`（生效中），覆盖月度/年度两种类型
+- 所有响应统一 None 安全处理，避免 `'NoneType' object has no attribute 'get'`
 
 **环境变量：**
-- `BILIBILI_COOKIE`: B站登录 Cookie（必需，格式: `key1=value1; key2=value2`）
+- `BILIBILI_COOKIE`: B站登录 Cookie（必需，需包含 `SESSDATA` 和 `bili_jct`）
 - `COIN_NUM`: 每日投币数量（默认5）
-- `COIN_TYPE`: 投币类型（1=关注用户视频，其他=分区视频，默认1）
+- `SKIP_COIN`: 是否跳过投币任务（true/false，默认false，节省硬币）
+- `SKIP_SHARE`: 是否跳过分享任务（true/false，默认false）
 - `SILVER2COIN`: 是否兑换银瓜子为硬币（true/false，默认false）
 - `RECEIVE_VIP_PRIVILEGE`: 是否领取大会员权益（true/false，默认false）
-- `SKIP_SHARE`: 是否跳过分享任务（true/false，默认false）
+- `LIVE_ROOM_DANMU`: 直播间弹幕签到 room_id，多个用逗号分隔（可选）
+- `LIVE_DANMU_MSG`: 弹幕内容（默认"签到"）
+
+**依赖：**
+- `requests`
 
 **配置示例：**
 ```yaml
 tasks:
-  - name: "BilibiliDaily"
-    schedule: "0 14 * * *"
+  - name: "Bilibili"
+    schedule: "0 8 * * *"
     script: "tasks/bilibili.py"
     description: "B站每日任务"
     enabled: true
     env:
-      BILIBILI_COOKIE: "SESSDATA=xxx; bili_jct=xxx"
+      BILIBILI_COOKIE: "SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
       COIN_NUM: "5"
-      COIN_TYPE: "1"
-      SILVER2COIN: "true"
-      RECEIVE_VIP_PRIVILEGE: "true"
+      SKIP_COIN: "false"
       SKIP_SHARE: "false"
+      SILVER2COIN: "false"
+      RECEIVE_VIP_PRIVILEGE: "false"
+      # LIVE_ROOM_DANMU: "30858592,22637261"  # 可选
+      # LIVE_DANMU_MSG: "签到"                 # 可选
 ```
 
 ---
@@ -226,7 +243,7 @@ tasks:
     enabled: true
     env:
       V2EX_COOKIE: "A2=xxx; PB3_SESSION=xxx"
-      V2EX_PROXY: "http://127.0.0.1:7890"  # 可选
+      V2EX_PROXY: *proxy  # 引用共享代理（可选）
 ```
 
 ---
@@ -257,8 +274,78 @@ tasks:
     env:
       NODESEEK_COOKIE: "your_cookie_here"
       NODESEEK_RANDOM: "true"  # 可选，true=随机鸡腿，false=固定5个鸡腿
-      NODESEEK_PROXY: "http://127.0.0.1:7890"  # 可选
+      NODESEEK_PROXY: *proxy   # 引用共享代理（可选）
 ```
+
+---
+
+### zhutix.py
+
+**功能：**
+- 自动签到致美化网站
+- 获取锋币奖励信息
+- 获取连续签到天数
+- 自动识别"已签到/未到签到时间"状态，不误报失败
+
+**环境变量：**
+- `ZHUTIX_COOKIE`: 登录 Cookie（必需，格式: `key1=value1; key2=value2`）
+  - 必须包含名为 `b2_token` 的字段，否则接口返回 403。建议在浏览器登录后从开发者工具复制「全部 Cookie」（含 `b2_token`），而非仅复制 `wordpress_logged_in` 等字段。
+- `ZHUTIX_PROXY`: 代理服务器地址（可选，如 `http://127.0.0.1:7890`）
+
+**依赖：**
+- `curl_cffi`: 用于模拟浏览器请求，绕过反爬虫
+
+**状态码说明：**
+致美化 B2 主题 `userMission` 接口可能返回简单状态码：
+- 正常 dict → 签到成功，包含锋币奖励信息
+- `3` → 今日已签到（不算失败）
+- `1` → 未到签到时间，签到周期尚未重置（不算失败）
+- 其他未知响应 → 按失败处理，触发通知
+
+**配置示例：**
+```yaml
+tasks:
+  - name: "ZhuTiX"
+    schedule: "0 11 * * *"
+    script: "tasks/zhutix.py"
+    description: "致美化网站签到"
+    enabled: true
+    env:
+      ZHUTIX_COOKIE: "your_cookie_here"
+      ZHUTIX_PROXY: *proxy  # 引用共享代理（可选）
+```
+
+> ⚠️ **注意**：致美化签到周期并非凌晨 0 点重置，建议把执行时间设置在上午（如 11:00），避免凌晨触发时服务器尚未重置签到周期。
+
+---
+
+## 共享代理配置
+
+多个脚本需要使用同一代理时，可在 `config.yml` 顶部用 YAML 锚点声明一次，下方任务通过 `*proxy` 引用。修改代理只需改一处，所有引用处自动生效。
+
+```yaml
+# 顶部声明（只需一次）
+proxy: &proxy
+  http://127.0.0.1:7890
+
+tasks:
+  - name: "V2EX"
+    env:
+      V2EX_PROXY: *proxy      # 引用共享代理
+  - name: "NodeSeek"
+    env:
+      NODESEEK_PROXY: *proxy  # 引用共享代理
+  - name: "ZhuTiX"
+    env:
+      ZHUTIX_PROXY: *proxy    # 引用共享代理
+```
+
+**说明：**
+- `&proxy` 定义锚点（名字可自定义，如 `&my_proxy`）
+- `*proxy` 引用锚点，YAML 解析时会被替换为实际值
+- 不使用代理时，注释掉顶部的 `proxy:` 字段，并删除任务中对应的 `*_PROXY: *proxy` 行
+- 锚点只能作为独立的值出现，不能用在字符串拼接里（如 `prefix *proxy` 不会被替换）
+- 需要不同代理时，可声明多个锚点（如 `&proxy`、`&proxy_us`）
 
 ---
 
@@ -278,6 +365,7 @@ tasks:
 - Cookie 通常包含会话信息，可能有时效性
 - 建议定期更新 Cookie 以保持签到正常
 - 部分网站可能需要特定的 Cookie 字段，请参考各脚本的文档字符串
+- Cookie 字符串过长时，可在 YAML 中用双引号跨行或 `>-` 折叠块写法提高可读性（YAML 会自动将换行折叠为空格）
 
 ---
 

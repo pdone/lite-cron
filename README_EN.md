@@ -61,7 +61,8 @@ lite-cron/
 │   ├── aliyunpan.py              # Aliyun Drive check-in
 │   ├── bilibili.py               # Bilibili check-in
 │   ├── v2ex.py                   # V2EX check-in
-│   └── nodeseek.py               # NodeSeek check-in
+│   ├── nodeseek.py               # NodeSeek check-in
+│   └── zhutix.py                 # ZhuTiX check-in
 ├── 📁 data/                      # Persistent data directory
 └── 📁 logs/                      # Runtime logs directory
 ```
@@ -257,6 +258,34 @@ if __name__ == '__main__':
 | `description` | Task description | `"Daily check-in"` |
 | `enabled` | Whether enabled | `true` / `false` |
 | `env` | Task-specific env vars | `KEY: "value"` |
+
+### Shared Variables (YAML Anchors)
+
+When multiple tasks need the same proxy address, declare it once at the top of `config.yml` using a YAML anchor, then reference it via `*proxy` in tasks below. Changing the proxy only requires one edit.
+
+```yaml
+# Declare anchor at top
+proxy: &proxy
+  http://127.0.0.1:7890
+
+tasks:
+  - name: "V2EX"
+    env:
+      V2EX_PROXY: *proxy      # Reference shared proxy
+  - name: "NodeSeek"
+    env:
+      NODESEEK_PROXY: *proxy  # Reference shared proxy
+  - name: "ZhuTiX"
+    env:
+      ZHUTIX_PROXY: *proxy    # Reference shared proxy
+```
+
+**Notes:**
+- `&proxy` defines the anchor (name is customizable, e.g. `&my_proxy`)
+- `*proxy` references the anchor, replaced with the actual value during YAML parsing
+- To disable proxy, comment out the top-level `proxy:` field and remove the corresponding `*_PROXY: *proxy` lines in tasks
+- Anchors can only be used as standalone values, not in string concatenation
+- For different proxies, declare multiple anchors (e.g. `&proxy`, `&proxy_us`)
 
 ### Cron Expressions
 

@@ -61,7 +61,8 @@ lite-cron/
 │   ├── aliyunpan.py              # 阿里云盘签到
 │   ├── bilibili.py               # 哔哩哔哩签到
 │   ├── v2ex.py                   # V2EX 签到
-│   └── nodeseek.py               # NodeSeek 签到
+│   ├── nodeseek.py               # NodeSeek 签到
+│   └── zhutix.py                 # 致美化签到
 ├── 📁 data/                      # 持久化数据目录
 └── 📁 logs/                      # 运行时日志目录
 ```
@@ -258,6 +259,34 @@ if __name__ == '__main__':
 | `description` | 任务描述 | `"每日签到"` |
 | `enabled` | 是否启用 | `true` / `false` |
 | `env` | 专属环境变量 | `KEY: "value"` |
+
+### 共享变量（YAML 锚点）
+
+多个任务需要使用同一代理地址时，可在 `config.yml` 顶部用 YAML 锚点声明一次，下方任务通过 `*proxy` 引用，修改代理只需改一处。
+
+```yaml
+# 顶部声明锚点
+proxy: &proxy
+  http://127.0.0.1:7890
+
+tasks:
+  - name: "V2EX"
+    env:
+      V2EX_PROXY: *proxy      # 引用共享代理
+  - name: "NodeSeek"
+    env:
+      NODESEEK_PROXY: *proxy  # 引用共享代理
+  - name: "ZhuTiX"
+    env:
+      ZHUTIX_PROXY: *proxy    # 引用共享代理
+```
+
+**说明：**
+- `&proxy` 定义锚点（名字可自定义，如 `&my_proxy`）
+- `*proxy` 引用锚点，YAML 解析时会被替换为实际值
+- 不使用代理时，注释掉顶部的 `proxy:` 字段，并删除任务中对应的 `*_PROXY: *proxy` 行
+- 锚点只能作为独立的值出现，不能用在字符串拼接里
+- 需要不同代理时，可声明多个锚点（如 `&proxy`、`&proxy_us`）
 
 ### Cron 表达式
 

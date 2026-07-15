@@ -65,7 +65,7 @@ lite-cron/
 │   └── static/            # Static assets
 ├── tasks/                 # Task scripts (user-facing)
 │   ├── ikuuu.py, pttime.py, smzdm.py, tieba.py, fnclub.py,
-│   ├── aliyunpan.py, bilibili.py, v2ex.py, nodeseek.py
+│   ├── aliyunpan.py, bilibili.py, v2ex.py, nodeseek.py, zhutix.py
 │   └── README.md          # Task documentation
 ├── logs/                  # Runtime logs (date-based: YYYYMMDD.log)
 └── data/                  # Persistent data
@@ -199,6 +199,35 @@ webui:
   debug: false                 # Flask debug mode
 ```
 
+### 共享变量（YAML 锚点）
+
+多个任务需要使用同一代理地址时，可在 `config.yml` 顶部用 YAML 锚点声明一次，下方任务通过 `*proxy` 引用，修改代理只需改一处。
+
+```yaml
+# 顶部声明锚点（只需一次）
+proxy: &proxy "http://127.0.0.1:7890"
+
+tasks:
+  - name: "V2EX"
+    env:
+      V2EX_PROXY: *proxy      # 引用共享代理
+  - name: "NodeSeek"
+    env:
+      NODESEEK_PROXY: *proxy  # 引用共享代理
+  - name: "ZhuTiX"
+    env:
+      ZHUTIX_PROXY: *proxy    # 引用共享代理
+```
+
+说明：
+- `&proxy` 定义锚点（名字可自定义，如 `&my_proxy`）
+- `*proxy` 引用锚点，YAML 解析时会被替换为实际值
+- 不使用代理时，注释掉顶部的 `proxy:` 字段，并删除任务中对应的 `*_PROXY: *proxy` 行（否则引用会解析失败）
+- 锚点只能作为独立的值出现，不能用在字符串拼接里（如 `prefix *proxy` 不会被替换）
+- 需要不同代理时，可声明多个锚点（如 `&proxy`、`&proxy_us`）
+
+> ⚠️ **注意**：WebUI 切换任务启用状态时通过 `ruamel.yaml` 直接修改 `enabled` 字段并原样 dump，以完整保留锚点、别名与注释，避免 `safe_load` 展开别名后回灌覆盖。
+
 ### Cron Expression Format
 
 ```
@@ -253,7 +282,7 @@ python manage.py restart       # No rebuild needed - config is volume-mounted
 
 - Default: http://localhost:5000
 - Features: Task list, manual execution, log viewer, config editor
-- API endpoints: `/api/status`, `/api/tasks`, `/api/logs`, `/api/tasks/<name>/run`
+- API endpoints: `/api/status`, `/api/tasks`, `/api/logs`, `/api/tasks/<name>/run`, `/api/tasks/<name>/toggle`
 
 ## Common Pitfalls
 

@@ -188,15 +188,16 @@ def sign(cookie: str, proxy: Optional[str] = None) -> bool:
             #   1 → 未到签到时间（签到周期未重置）
             #   3 → 今日已签到
             # 这两种状态都不算失败，只是无法获得新的签到奖励
-            if res_data == 3:
+            rd = str(res_data)
+            if rd == "3":
                 log_info("今日已签到，跳过")
                 return True
-            if res_data == 1:
+            if rd == "1":
                 log_warning("未到签到时间（签到周期尚未重置），跳过")
                 return True
 
             # 其他未知响应，按失败处理以便及时发现异常
-            log_warning(f"签到响应格式异常，可能未真正签到: {str(res_data)[:200]}")
+            log_warning(f"签到响应格式异常，可能未真正签到: {rd[:200]}")
             return False
 
         else:

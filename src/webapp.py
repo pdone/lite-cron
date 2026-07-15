@@ -102,6 +102,54 @@ def _deep_merge(base, update):
             base[key] = value
 
 
+def toggle_task_enabled(task_name: str) -> Optional[bool]:
+    """切换任务启用状态，直接操作 ruamel doc 仅修改 enabled 字段。
+
+    绕过 load_config + save_config 链路：safe_load 会把 YAML 别名（如 *proxy）
+    展开为字面量，再经 _deep_merge 回灌会覆盖 ruamel doc 中的别名节点，导致
+    顶部 proxy 锚点引用丢失。本函数仅改 enabled 字段后原样 dump，完整保留
+    锚点、别名与注释。
+
+    Returns:
+        新的 enabled 状态；任务未找到或保存失败时返回 None
+    """
+    try:
+        from ruamel.yaml import YAML
+
+        ry = YAML()
+        ry.preserve_quotes = True
+
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            doc = ry.load(f)
+
+        if not doc or "tasks" not in doc:
+            log_warning(f"切换任务状态失败: 配置未找到或无 tasks 段")
+            return None
+
+        found = False
+        new_status = None
+        for task in doc["tasks"]:
+            name = task.get("name", "")
+            if isinstance(name, str) and name.lower() == task_name.lower():
+                current = bool(task.get("enabled", True))
+                task["enabled"] = not current
+                new_status = not current
+                found = True
+                break
+
+        if not found:
+            log_warning(f"切换任务状态失败: 任务 {task_name} 未找到")
+            return None
+
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            ry.dump(doc, f)
+
+        return new_status
+    except Exception as e:
+        log_error(f"切换任务状态失败: {e}")
+        return None
+
+
 def get_container_status() -> Dict[str, Any]:
     """获取容器状态"""
     try:
@@ -435,32 +483,22 @@ def api_run_task(task_name: str):
 
 @app.route("/api/tasks/<task_name>/toggle", methods=["POST"])
 def api_toggle_task(task_name: str):
-    """切换任务状态"""
-    config = load_config()
-    if not config or "tasks" not in config:
-        return jsonify({"success": False, "message": "配置未找到"})
+    """切换任务状态
 
-    task_found = False
-    for task in config["tasks"]:
-        if task.get("name", "").lower() == task_name.lower():
-            task["enabled"] = not task.get("enabled", True)
-            new_status = task["enabled"]
-            task_found = True
-            break
+    通过 toggle_task_enabled 直接操作 ruamel doc，仅改 enabled 字段，
+    避免 safe_load 展开别名后回灌覆盖 YAML 锚点（如顶部 proxy 锚点）。
+    """
+    new_status = toggle_task_enabled(task_name)
+    if new_status is None:
+        return jsonify({"success": False, "message": "任务未找到或保存失败"})
 
-    if not task_found:
-        return jsonify({"success": False, "message": "任务未找到"})
-
-    if save_config(config):
-        return jsonify(
-            {
-                "success": True,
-                "enabled": new_status,
-                "message": f"任务已{'启用' if new_status else '禁用'}",
-            }
-        )
-    else:
-        return jsonify({"success": False, "message": "保存配置失败"})
+    return jsonify(
+        {
+            "success": True,
+            "enabled": new_status,
+            "message": f"任务已{'启用' if new_status else '禁用'}",
+        }
+    )
 
 
 @app.route("/api/logs")
