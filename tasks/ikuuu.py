@@ -9,8 +9,8 @@ iKuuu 自动签到任务
 
 环境变量：
 - IKUUU_COOKIE: 登录 Cookie（优先使用，格式: key1=value1; key2=value2）
-- MY_EMAIL: 登录邮箱（Cookie 失效时回退使用）
-- MY_PWD: 登录密码（Cookie 失效时回退使用）
+- IKUUU_EMAIL: 登录邮箱（Cookie 失效时回退使用）
+- IKUUU_PWD: 登录密码（Cookie 失效时回退使用）
 """
 
 import os
@@ -49,15 +49,15 @@ def get_credentials() -> tuple:
         tuple: (cookie列表, 邮箱列表, 密码列表)
     """
     cookie = os.environ.get("IKUUU_COOKIE")
-    email = os.environ.get("MY_EMAIL")
-    password = os.environ.get("MY_PWD")
+    email = os.environ.get("IKUUU_EMAIL")
+    password = os.environ.get("IKUUU_PWD")
 
     cookies = [cookie] if cookie else []
     emails = [email] if email else []
     passwords = [password] if password else []
 
     if not cookies and not (emails and passwords):
-        log_error("错误: 请配置环境变量 IKUUU_COOKIE，或同时配置 MY_EMAIL 和 MY_PWD")
+        log_error("错误: 请配置环境变量 IKUUU_COOKIE，或同时配置 IKUUU_EMAIL 和 IKUUU_PWD")
         return [], [], []
 
     return cookies, emails, passwords

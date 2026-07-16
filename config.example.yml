@@ -17,8 +17,8 @@ tasks:
     enabled: true
     env:
       IKUUU_COOKIE: "your_cookie_here"          # 优先使用 Cookie 登录
-      # MY_EMAIL: "your_email"                   # Cookie 失效时回退使用
-      # MY_PWD: "your_password"                  # Cookie 失效时回退使用
+      # IKUUU_EMAIL: "your_email"                # Cookie 失效时回退使用
+      # IKUUU_PWD: "your_password"               # Cookie 失效时回退使用
 
   - name: "PTTime"
     schedule: "0 3 * * *"
@@ -69,13 +69,13 @@ tasks:
     enabled: true
     env:
       BILIBILI_COOKIE: "SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
-      # COIN_NUM: "5"                    # 每日投币数量，默认5
-      # SKIP_COIN: "false"               # 是否跳过投币任务: true/false，默认false（节省硬币）
-      # SKIP_SHARE: "false"              # 是否跳过分享任务: true/false，默认false
-      # SILVER2COIN: "false"             # 是否兑换银瓜子为硬币: true/false，默认false
-      # RECEIVE_VIP_PRIVILEGE: "false"   # 是否领取大会员权益: true/false，默认false
-      # LIVE_ROOM_DANMU: "30858592,22637261"  # 可选，直播间弹幕签到 room_id，多个用逗号分隔
-      # LIVE_DANMU_MSG: "签到"                 # 可选，弹幕内容，默认"签到"
+      # BILIBILI_COIN_NUM: "5"                    # 每日投币数量，默认5
+      # BILIBILI_SKIP_COIN: "false"               # 是否跳过投币任务: true/false，默认false（节省硬币）
+      # BILIBILI_SKIP_SHARE: "false"              # 是否跳过分享任务: true/false，默认false
+      # BILIBILI_SILVER2COIN: "false"             # 是否兑换银瓜子为硬币: true/false，默认false
+      # BILIBILI_RECEIVE_VIP_PRIVILEGE: "false"   # 是否领取大会员权益: true/false，默认false
+      # BILIBILI_COIN_FOLLOW: "false"             # 投币是否只给关注列表 UP 主: true/false，默认false
+      # BILIBILI_WATCH_FOLLOW: "false"            # 观看是否只看关注列表 UP 主视频: true/false，默认false
 
   - name: "V2EX"
     schedule: "0 9 * * *"

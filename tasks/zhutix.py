@@ -20,6 +20,7 @@
 
 import os
 import sys
+from datetime import datetime
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -29,6 +30,7 @@ from logger import log_info, log_success, log_error, log_warning, log_debug
 BASE_URL = "https://zhutix.com"
 MISSION_URL = f"{BASE_URL}/mission/"
 USER_MISSION_API = f"{BASE_URL}/wp-json/b2/v1/userMission"
+GET_USER_MISSION_API = f"{BASE_URL}/wp-json/b2/v1/getUserMission"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -131,9 +133,124 @@ def build_auth_headers(cookie: str) -> dict:
     return headers
 
 
+def _to_int(value, default: int = 0) -> int:
+    """
+    安全地将（可能为字符串的）值转换为整数
+
+    接口返回的 credit / always / my_credit 均为字符串（如 "2"、"13"），
+    统一转换为 int 以便日志展示与后续处理。
+
+    Args:
+        value: 待转换的值（可能为 str / int / None）
+        default: 转换失败时的默认值
+
+    Returns:
+        int: 转换后的整数
+    """
+    if value is None:
+        return default
+    try:
+        return int(float(value))
+    except (ValueError, TypeError):
+        return default
+
+
+def _is_today(date_str: str) -> bool:
+    """
+    判断日期字符串是否为今天
+
+    date 字段格式示例："2026-07-16 10:26:44"
+
+    Args:
+        date_str: 日期时间字符串
+
+    Returns:
+        bool: 是否为今天
+    """
+    if not date_str:
+        return False
+    try:
+        date_part = str(date_str).split(" ", 1)[0]
+        return datetime.strptime(date_part, "%Y-%m-%d").date() == datetime.now().date()
+    except ValueError:
+        return False
+
+
+def get_user_mission(cookie: str, proxy: Optional[str] = None) -> Optional[dict]:
+    """
+    调用 getUserMission 接口获取当前签到状态
+
+    该接口为 POST 请求（非 GET），需以 application/x-www-form-urlencoded
+    提交表单参数 count/paged；鉴权方式与签到一致（Cookie + Bearer）。
+
+    只返回 mission 子对象，其中字段：
+    - date: 上次签到时间
+    - credit: 今日签到获取的锋币
+    - always: 连续签到天数
+    - my_credit: 账户锋币总数
+
+    Args:
+        cookie: 登录 Cookie
+        proxy: 代理地址（可选）
+
+    Returns:
+        Optional[dict]: mission 子对象，失败返回 None
+    """
+    try:
+        from curl_cffi import requests as curl_requests
+
+        headers = build_auth_headers(cookie)
+        # 该接口要求表单提交，而非 JSON
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+
+        response = curl_requests.post(
+            GET_USER_MISSION_API,
+            headers=headers,
+            data="count=1&paged=1",
+            timeout=15,
+            proxies=proxies,
+        )
+
+        if response.status_code != 200:
+            log_error(f"获取签到状态失败，服务器返回状态码: {response.status_code}")
+            log_debug(f"响应内容: {response.text[:500]}")
+            return None
+
+        try:
+            res_data = response.json()
+        except ValueError:
+            log_warning(f"签到状态响应非 JSON 格式: {response.text[:200]}")
+            return None
+
+        if not isinstance(res_data, dict):
+            log_warning(f"签到状态响应格式异常: {response.text[:200]}")
+            return None
+
+        mission = res_data.get("mission")
+        if not isinstance(mission, dict):
+            log_warning("签到状态响应中缺少 mission 字段")
+            return None
+
+        return mission
+
+    except ImportError:
+        log_error("缺少依赖: curl_cffi，请执行 pip install curl_cffi")
+        return None
+    except Exception as e:
+        log_error(f"获取签到状态异常: {str(e)}")
+        return None
+
+
 def sign(cookie: str, proxy: Optional[str] = None) -> bool:
     """
     执行签到
+
+    流程：
+    1. 调用 getUserMission 获取当前签到状态（只解析 mission 字段）
+    2. 若今日已签到，直接跳过
+    3. 调用 userMission 接口；只要响应值大于 0，即本次签到成功，
+       该值就是本次签到获取的锋币数量
 
     Args:
         cookie: 登录 cookie
@@ -146,64 +263,51 @@ def sign(cookie: str, proxy: Optional[str] = None) -> bool:
         from curl_cffi import requests as curl_requests
 
         headers = build_auth_headers(cookie)
+        proxies = {"http": proxy, "https": proxy} if proxy else None
 
-        proxies = None
-        if proxy:
-            proxies = {"http": proxy, "https": proxy}
+        # 1. 获取当前签到状态
+        mission = get_user_mission(cookie, proxy)
+        if mission:
+            last_date = str(mission.get("date", ""))
+            today_gain = _to_int(mission.get("credit", 0))
+            days = _to_int(mission.get("always", 0))
+            total = _to_int(mission.get("my_credit", 0))
+            log_info(
+                f"当前签到状态：上次签到 {last_date}，今日已获 {today_gain} 锋币，"
+                f"连续 {days} 天，账户共 {total} 锋币"
+            )
 
+            if _is_today(last_date) and today_gain > 0:
+                log_info("今日已签到，跳过")
+                return True
+
+        # 2. 调用签到接口
         log_info("正在签到...")
-
         response = curl_requests.post(
             USER_MISSION_API,
             headers=headers,
-            impersonate="chrome110",
             timeout=15,
             proxies=proxies,
         )
 
-        if response.status_code == 200:
-            res_data = response.json()
-
-            if isinstance(res_data, dict):
-                if res_data.get("success") is False:
-                    msg = res_data.get("msg", res_data.get("message", "签到失败"))
-                    log_info(f"签到提示: {msg}")
-                    if "已签到" in msg or "already" in msg.lower():
-                        return True
-                    return False
-
-                if res_data.get("success") is True or "mission" in res_data:
-                    mission_data = res_data.get("mission", res_data.get("data", {}))
-                    if isinstance(mission_data, dict):
-                        gain = mission_data.get("credit", mission_data.get("gain", 0))
-                        current = mission_data.get("my_credit", mission_data.get("current", 0))
-                        days = mission_data.get("always", mission_data.get("continuous", 0))
-                        log_success(f"签到成功！获得 {gain} 锋币，当前共有 {current} 锋币，连续签到 {days} 天")
-                    else:
-                        log_success("签到成功！")
-                    return True
-
-            # 响应不是预期的 dict 结构，可能是 B2 主题返回的简单状态码
-            # 致美化 userMission 接口状态码含义：
-            #   1 → 未到签到时间（签到周期未重置）
-            #   3 → 今日已签到
-            # 这两种状态都不算失败，只是无法获得新的签到奖励
-            rd = str(res_data)
-            if rd == "3":
-                log_info("今日已签到，跳过")
-                return True
-            if rd == "1":
-                log_warning("未到签到时间（签到周期尚未重置），跳过")
-                return True
-
-            # 其他未知响应，按失败处理以便及时发现异常
-            log_warning(f"签到响应格式异常，可能未真正签到: {rd[:200]}")
-            return False
-
-        else:
+        if response.status_code != 200:
             log_error(f"签到失败，服务器返回状态码: {response.status_code}")
             log_debug(f"响应内容: {response.text[:500]}")
             return False
+
+        try:
+            res_data = response.json()
+        except ValueError:
+            log_warning(f"签到响应非 JSON 格式: {response.text[:200]}")
+            return False
+
+        gain = _to_int(res_data, 0)
+        if gain > 0:
+            log_success(f"签到成功！获得 {gain} 锋币")
+            return True
+
+        log_warning(f"签到未获得锋币，可能今日已签到或失败: {res_data}")
+        return False
 
     except ImportError:
         log_error("缺少依赖: curl_cffi，请执行 pip install curl_cffi")
@@ -230,8 +334,9 @@ def main() -> int:
 
     proxy = parse_proxy(proxy_url) if proxy_url else None
 
-    # 直接调用签到接口，sign() 内部会处理已签到(3)/未到时间(1)等状态
+    # sign() 内部会先获取签到状态，再调用 userMission 接口
     success = sign(cookie, proxy)
+
 
     if success:
         log_success("任务完成")

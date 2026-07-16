@@ -15,8 +15,10 @@ python manage.py start|stop|restart|status|logs|shell|build|update
 
 # Task management
 python manage.py list                    # List scheduled tasks
-python manage.py run <TaskName>          # Run specific task
-python manage.py run --all               # Run all enabled tasks
+python manage.py run <TaskName>          # Run specific task (in container)
+python manage.py run --all               # Run all enabled tasks (in container)
+python manage.py run-local <TaskName>    # Run task locally (no Docker required)
+python manage.py run-local --all         # Run all enabled tasks locally
 python manage.py tasklogs                # View task logs
 python manage.py validate                # Validate config.yml
 
@@ -164,6 +166,44 @@ if __name__ == "__main__":
 3. Test locally: `python tasks/myscript.py`
 4. Rebuild container if adding new pip dependencies: `python manage.py build`
 
+## 环境变量命名规范
+
+为在“模块解耦”与“配置一致性”之间取得平衡，所有任务的环境变量遵循统一规范：**以任务名为前缀进行命名空间化**。
+
+### 核心原则
+
+1. **一律使用任务名前缀**：任务的所有 env 键必须以 `<任务名大写>_` 前缀声明，例如 `IKUUU_COOKIE`、`BILIBILI_COOKIE`、`V2EX_PROXY`。
+   - 前缀不是冗余噪声，而是标识“该凭据/配置属于哪个任务”的语义信息，可避免多任务同名键冲突。
+   - `make_env.py` 会自动为 `config.yml` 中 `task.env` 的键加上 `任务名_` 前缀；`task_wrapper.py` 注入时会同时保留带前缀与去前缀两种形态，脚本读取带前缀的名字即可。
+
+2. **凭据类命名要语义准确**：
+   - 站点 Cookie 统一用 `<TASK>_COOKIE`（如 `IKUUU_COOKIE`、`V2EX_COOKIE`）。
+   - 账号密码类用 `<TASK>_EMAIL` / `<TASK>_PWD`（如 `IKUUU_EMAIL` / `IKUUU_PWD`）。
+   - Token 类按真实语义命名，不要硬塞进 `COOKIE` 家族，如阿里云盘用 `ALIYUN_REFRESH_TOKEN`。
+
+3. **可选开关也要带前缀**：功能开关、参数同样遵循前缀规范，避免全局裸键。例如 Bilibili 的 `BILIBILI_COIN_NUM`、`BILIBILI_SKIP_COIN`、`BILIBILI_SILVER2COIN` 等，而非裸 `COIN_NUM`、`SKIP_COIN`。
+
+4. **脚本内统一读取带前缀的名字**：`os.environ.get("<TASK>_XXX")`，保证配置层键名与脚本读取一致，便于全局检索与审查。
+
+### 不要合并跨任务的凭据变量
+
+Cookie / Token 是**站点专属**凭据（iKuuu 的 Cookie 不能用于 V2EX），禁止将不同任务的 cookie 合并成同一个 `COOKIE` 变量。合并会破坏脚本独立部署与解耦性（同一 shell 下多个脚本会争抢同一变量），且语义不成立。
+
+### 真正全局的资源用“值共享、键命名空间化”
+
+代理、时区等**真正全局**的资源，可通过以下方式共享值，但键名仍保持任务前缀：
+
+- `global_env`：所有任务共享（如 `TZ: "Asia/Shanghai"`）。
+- YAML 锚点：在 `config.yml` 顶部用 `proxy: &proxy "..."` 声明一次，任务中通过 `任务名_PROXY: *proxy` 引用。改代理只需改一处，同时各任务键名仍是 `V2EX_PROXY`、`NODESEEK_PROXY` 等命名空间化形态。
+
+### 反例与修正
+
+| 反例（避免） | 正确写法 |
+|---|---|
+| `MY_EMAIL` / `MY_PWD` | `IKUUU_EMAIL` / `IKUUU_PWD` |
+| 裸 `COIN_NUM` / `SKIP_COIN` | `BILIBILI_COIN_NUM` / `BILIBILI_SKIP_COIN` |
+| 多任务共用一个 `COOKIE` | 各任务独立的 `<TASK>_COOKIE` |
+
 ## Configuration
 
 ### config.yml Structure
@@ -298,7 +338,10 @@ python manage.py restart       # No rebuild needed - config is volume-mounted
 # Validate config syntax
 python manage.py validate
 
-# Test task manually
+# Test task manually (locally, no Docker)
+python manage.py run-local TaskName
+
+# Or run inside the container (container must be running)
 python manage.py run TaskName
 
 # Test notification

@@ -46,6 +46,7 @@ MENU_GROUPS = [
     ]),
     ("任务相关", [
         ("run", "执行指定任务"),
+        ("run-local", "本地执行任务"),
         ("tasklogs", "查看任务日志"),
         ("list", "查看定时任务列表"),
         ("clean", "清理日志"),
@@ -860,6 +861,112 @@ def cmd_run(task_name: Optional[str] = None, run_all: bool = False, interactive:
         return 1
 
 
+def cmd_run_local(task_name: Optional[str] = None, run_all: bool = False, interactive: bool = True) -> int:
+    """本地直接执行任务（不依赖 Docker）
+
+    直接解析 config.yml，将 global_env 与 task.env 以原始键名注入本机进程环境，
+    再用本机 Python 运行 tasks/xxx.py。绕开 Docker 与 task_wrapper 的前缀机制。
+    """
+    config = load_config()
+    if config is None:
+        print_error("未找到 config.yml 文件，请先 cp config.example.yml config.yml")
+        return 1
+
+    tasks = config.get("tasks", [])
+    if not tasks:
+        print_warning("没有配置任何任务")
+        return 1
+
+    # 交互式选择任务
+    if interactive and not task_name and not run_all:
+        task_name = select_task_interactive()
+        if task_name is None:
+            return 0
+
+    if not task_name and not run_all:
+        print_error("请指定任务名称或使用 --all 运行所有任务")
+        return 1
+
+    # 确定要执行的任务列表
+    if run_all:
+        targets = [t for t in tasks if t.get("enabled", True)]
+        if not targets:
+            print_warning("没有已启用的任务")
+            return 1
+    else:
+        task_name_lower = task_name.lower()
+        target = next(
+            (t for t in tasks if t.get("name", "").lower() == task_name_lower),
+            None,
+        )
+        if not target:
+            print_error(f"未找到任务: {task_name}")
+            return 1
+        targets = [target]
+
+    # 预先构建基础环境：本机环境 + global_env，日志落到项目 logs 目录
+    base_env = os.environ.copy()
+    for key, value in (config.get("global_env") or {}).items():
+        base_env[str(key)] = str(value)
+    base_env.setdefault("LOG_DIR", str(PROJECT_ROOT / "logs"))
+    base_env.setdefault("LITECRON_EXEC_MODE", "cli")
+
+    failed_count = 0
+    success_count = 0
+
+    if run_all:
+        print_info(f"本地执行 {len(targets)} 个已启用任务...")
+        print("-" * 50)
+
+    for task in targets:
+        name = task.get("name", "未命名")
+        script = task.get("script", "")
+
+        if not script:
+            print_error(f"任务未配置脚本: {name}")
+            failed_count += 1
+            continue
+
+        if not run_all and not task.get("enabled", True):
+            print_warning(f"任务已禁用: {name}（本地仍将执行）")
+
+        script_path = PROJECT_ROOT / script
+        if not script_path.exists():
+            print_error(f"脚本不存在: {script_path}")
+            failed_count += 1
+            continue
+
+        # 逐任务注入 env（原始键名，无前缀）
+        env = base_env.copy()
+        for key, value in (task.get("env") or {}).items():
+            env[str(key)] = str(value)
+
+        print_info(f"本地执行任务: {name} ({script})")
+        try:
+            result = subprocess.run(
+                [sys.executable, str(script_path)],
+                env=env,
+                cwd=str(PROJECT_ROOT),
+            )
+            rc = result.returncode
+        except Exception as e:
+            print_error(f"执行异常: {e}")
+            rc = 1
+
+        if rc == 0:
+            print_success(f"{name} 执行成功")
+            success_count += 1
+        else:
+            print_error(f"{name} 执行失败 (退出码: {rc})")
+            failed_count += 1
+
+    if run_all:
+        print("-" * 50)
+        print(f"执行完成: {success_count} 个成功, {failed_count} 个失败")
+
+    return 1 if failed_count > 0 else 0
+
+
 def cmd_notify(message: Optional[str] = None, include_log: bool = False, log_lines: int = 15) -> int:
     """发送测试通知"""
     
@@ -964,8 +1071,10 @@ LiteCron 容器管理脚本 (Python 实现)
   update             更新项目
 
 任务相关:
-  run <任务名>       执行指定任务
-  run --all          运行所有已启用任务
+  run <任务名>       执行指定任务（容器内，需先启动容器）
+  run --all          运行所有已启用任务（容器内）
+  run-local <任务名> 本地直接执行任务（不依赖 Docker）
+  run-local --all    本地执行所有已启用任务
   tasklogs           查看任务日志
   list               查看定时任务列表
   clean              清理日志
@@ -980,7 +1089,8 @@ LiteCron 容器管理脚本 (Python 实现)
   python manage.py              # 交互式菜单
   python manage.py start        # 启动容器
   python manage.py list         # 查看定时任务
-  python manage.py run ikuuu    # 执行 ikuuu 任务
+  python manage.py run ikuuu    # 执行 ikuuu 任务（容器内）
+  python manage.py run-local ikuuu  # 本地直接测试 ikuuu 任务
   python manage.py notify       # 发送测试通知
 """
     print(help_text)
@@ -1002,28 +1112,40 @@ def run_interactive() -> int:
         "6": ("shell", cmd_shell),
         "7": ("build", cmd_build),
         "8": ("update", cmd_update),
-        # 任务相关（第2列，从上到下 9-12）
+        # 任务相关（第2列，从上到下 9-13）
         "9": ("run", lambda: cmd_run(interactive=True)),
-        "10": ("tasklogs", cmd_task_logs),
-        "11": ("list", cmd_list),
-        "12": ("clean", cmd_clean),
-        # 通用（第3列，从上到下 13-16）
-        "13": ("validate", cmd_validate),
-        "14": ("notify", cmd_notify),
-        "15": ("help", cmd_help),
-        "16": ("exit", None),
+        "10": ("run-local", lambda: cmd_run_local(interactive=True)),
+        "11": ("tasklogs", cmd_task_logs),
+        "12": ("list", cmd_list),
+        "13": ("clean", cmd_clean),
+        # 通用（第3列，从上到下 14-17）
+        "14": ("validate", cmd_validate),
+        "15": ("notify", cmd_notify),
+        "16": ("help", cmd_help),
+        "17": ("exit", None),
     }
     
+    last_choice = None  # 记住上一次执行的命令，供直接回车重跑
+
     while True:
+        # 提示中显示回车默认重跑的上次命令
+        prompt = "请选择操作"
+        if last_choice:
+            last_name = command_map[last_choice][0]
+            prompt = f"请选择操作 (回车重跑 [{last_choice}] {last_name})"
+
         print_menu()
-        choice = get_input("请选择操作")
+        choice = get_input(prompt)
 
-        # 直接按 Enter 键，清屏并重新显示菜单
+        # 直接按 Enter：若之前执行过命令，则再次进入该命令；否则清屏重显菜单
         if not choice:
-            clear_screen()
-            continue
+            if last_choice:
+                choice = last_choice
+            else:
+                clear_screen()
+                continue
 
-        if choice in ("16", "exit", "quit", "q"):
+        if choice in ("17", "exit", "quit", "q"):
             print(f"Exit")
             return 0
 
@@ -1037,6 +1159,9 @@ def run_interactive() -> int:
         if cmd_func is None:
             print(f"Exit")
             return 0
+        
+        # 记录本次执行的命令，供后续直接回车重跑
+        last_choice = choice
         
         print()
         try:
@@ -1113,6 +1238,14 @@ def run_cli(command: str, args: List[str]) -> int:
         run_parser.add_argument("--all", action="store_true", dest="run_all", help="运行所有已启用任务")
         run_args, _ = run_parser.parse_known_args(args)
         return cmd_run(run_args.task, run_args.run_all, interactive=False)
+    
+    elif command == "run-local":
+        # 解析 run-local 命令的参数
+        run_local_parser = argparse.ArgumentParser(add_help=False)
+        run_local_parser.add_argument("task", nargs="?", help="任务名称")
+        run_local_parser.add_argument("--all", action="store_true", dest="run_all", help="运行所有已启用任务")
+        run_local_args, _ = run_local_parser.parse_known_args(args)
+        return cmd_run_local(run_local_args.task, run_local_args.run_all, interactive=False)
     
     elif command == "notify":
         # 解析 notify 命令的参数

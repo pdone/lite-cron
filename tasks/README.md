@@ -6,13 +6,13 @@
 
 | 脚本名称 | 功能描述 | 必需环境变量 | 可选环境变量 |
 |---------|---------|-------------|-------------|
-| [ikuuu.py](#ikuuupy) | iKuuu 自动签到 | `MY_EMAIL`, `MY_PWD` | - |
+| [ikuuu.py](#ikuuupy) | iKuuu 自动签到 | `IKUUU_COOKIE`（或 `IKUUU_EMAIL` + `IKUUU_PWD`） | `IKUUU_EMAIL`, `IKUUU_PWD` |
 | [pttime.py](#pttimepy) | PTTime 站点自动签到 | `PTTIME_COOKIE`, `PTTIME_UID` | `PTTIME_PROXY` |
 | [smzdm.py](#smzdmpy) | 什么值得买自动签到 | `SMZDM_COOKIE` | - |
 | [tieba.py](#tiebapy) | 百度贴吧自动签到 | `TIEBA_COOKIE` | - |
 | [fnclub.py](#fnclubpy) | 飞牛Nas论坛自动签到 | `FNNAS_COOKIE` | - |
 | [aliyunpan.py](#aliyunpanpy) | 阿里云盘自动签到 | `ALIYUN_REFRESH_TOKEN` | - |
-| [bilibili.py](#bilibilipy) | B站多功能签到 | `BILIBILI_COOKIE` | `COIN_NUM`, `SKIP_COIN`, `SKIP_SHARE`, `SILVER2COIN`, `RECEIVE_VIP_PRIVILEGE`, `LIVE_ROOM_DANMU`, `LIVE_DANMU_MSG` |
+| [bilibili.py](#bilibilipy) | B站多功能签到 | `BILIBILI_COOKIE` | `BILIBILI_COIN_NUM`, `BILIBILI_COIN_FOLLOW`, `BILIBILI_WATCH_FOLLOW`, `BILIBILI_SKIP_COIN`, `BILIBILI_SKIP_SHARE`, `BILIBILI_SILVER2COIN`, `BILIBILI_RECEIVE_VIP_PRIVILEGE`, `BILIBILI_PROXY` |
 | [v2ex.py](#v2expy) | V2EX 论坛自动签到 | `V2EX_COOKIE` | `V2EX_PROXY`, `V2EX_SSL_VERIFY` |
 | [nodeseek.py](#nodeseekpy) | NodeSeek 论坛自动签到 | `NODESEEK_COOKIE` | `NODESEEK_RANDOM`, `NODESEEK_PROXY` |
 | [zhutix.py](#zhutixpy) | 致美化网站自动签到 | `ZHUTIX_COOKIE` | `ZHUTIX_PROXY` |
@@ -31,8 +31,11 @@
 - 获取剩余流量信息
 
 **环境变量：**
-- `MY_EMAIL`: 登录邮箱（必需）
-- `MY_PWD`: 登录密码（必需）
+- `IKUUU_COOKIE`: 登录 Cookie（优先使用，格式: `key1=value1; key2=value2`）
+- `IKUUU_EMAIL`: 登录邮箱（Cookie 失效时回退使用）
+- `IKUUU_PWD`: 登录密码（Cookie 失效时回退使用）
+
+> 至少配置 `IKUUU_COOKIE`，或同时配置 `IKUUU_EMAIL` 和 `IKUUU_PWD`。
 
 **配置示例：**
 ```yaml
@@ -43,8 +46,9 @@ tasks:
     description: "iKuuu 每日签到"
     enabled: true
     env:
-      MY_EMAIL: "your_email@example.com"
-      MY_PWD: "your_password"
+      IKUUU_COOKIE: "your_cookie_here"          # 优先使用 Cookie 登录
+      # IKUUU_EMAIL: "your_email@example.com"   # Cookie 失效时回退使用
+      # IKUUU_PWD: "your_password"              # Cookie 失效时回退使用
 ```
 
 ---
@@ -176,26 +180,27 @@ tasks:
 - 观看视频任务（+5 EXP，使用 heartbeat 心跳上报）
 - 分享视频任务（+5 EXP）
 - 投币任务（每枚 +10 EXP，最多 5 枚 = 50 EXP）
-- 直播间弹幕签到（可选，发送弹幕完成直播任务）
 - 银瓜子换硬币（可选）
 - 领取大会员权益（可选，基于 vipStatus 判定）
 
 **实现要点：**
 - 从 `BILIBILI_COOKIE` 中提取 `SESSDATA` 和 `bili_jct` 双字段独立使用，兼容 `;` 和 `; ` 两种分隔符，规避 cookie 字符串分隔符差异导致的 CSRF 解析失败问题
 - 通过 `/x/member/web/exp/reward` 预检查任务状态，已完成任务自动跳过
-- 观看任务改用 popular 接口获取视频（含真实 cid）+ heartbeat 心跳上报
+- 观看任务改用 popular 接口获取视频（含真实 cid）+ heartbeat 心跳上报；开启 `BILIBILI_WATCH_FOLLOW` 后仅观看关注 UP 主视频（cid 为 0 时通过 view 接口解析真实 cid）
+- 投币/观看开启 `BILIBILI_COIN_FOLLOW` / `BILIBILI_WATCH_FOLLOW` 时，通过 `/x/relation/followings` 获取关注列表，再对每个 UP 主调用 `/x/space/arc/search` 拉取视频，仅对这些视频投币/观看
 - 大会员判定基于 `vipStatus`（生效中），覆盖月度/年度两种类型
 - 所有响应统一 None 安全处理，避免 `'NoneType' object has no attribute 'get'`
 
 **环境变量：**
 - `BILIBILI_COOKIE`: B站登录 Cookie（必需，需包含 `SESSDATA` 和 `bili_jct`）
-- `COIN_NUM`: 每日投币数量（默认5）
-- `SKIP_COIN`: 是否跳过投币任务（true/false，默认false，节省硬币）
-- `SKIP_SHARE`: 是否跳过分享任务（true/false，默认false）
-- `SILVER2COIN`: 是否兑换银瓜子为硬币（true/false，默认false）
-- `RECEIVE_VIP_PRIVILEGE`: 是否领取大会员权益（true/false，默认false）
-- `LIVE_ROOM_DANMU`: 直播间弹幕签到 room_id，多个用逗号分隔（可选）
-- `LIVE_DANMU_MSG`: 弹幕内容（默认"签到"）
+- `BILIBILI_PROXY`: HTTP(S) 代理地址（可选，如 `http://127.0.0.1:7890`，留空则直连）
+- `BILIBILI_COIN_NUM`: 每日投币数量（默认5）
+- `BILIBILI_COIN_FOLLOW`: 投币是否只给关注列表 UP 主（true/false，默认false）
+- `BILIBILI_WATCH_FOLLOW`: 观看是否只看关注列表 UP 主视频（true/false，默认false）
+- `BILIBILI_SKIP_COIN`: 是否跳过投币任务（true/false，默认false，节省硬币）
+- `BILIBILI_SKIP_SHARE`: 是否跳过分享任务（true/false，默认false）
+- `BILIBILI_SILVER2COIN`: 是否兑换银瓜子为硬币（true/false，默认false）
+- `BILIBILI_RECEIVE_VIP_PRIVILEGE`: 是否领取大会员权益（true/false，默认false）
 
 **依赖：**
 - `requests`
@@ -210,13 +215,13 @@ tasks:
     enabled: true
     env:
       BILIBILI_COOKIE: "SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
-      COIN_NUM: "5"
-      SKIP_COIN: "false"
-      SKIP_SHARE: "false"
-      SILVER2COIN: "false"
-      RECEIVE_VIP_PRIVILEGE: "false"
-      # LIVE_ROOM_DANMU: "30858592,22637261"  # 可选
-      # LIVE_DANMU_MSG: "签到"                 # 可选
+      BILIBILI_COIN_NUM: "5"
+      BILIBILI_SKIP_COIN: "false"
+      BILIBILI_SKIP_SHARE: "false"
+      BILIBILI_SILVER2COIN: "false"
+      BILIBILI_RECEIVE_VIP_PRIVILEGE: "false"
+      # BILIBILI_COIN_FOLLOW: "false"   # 可选，投币只给关注列表 UP 主
+      # BILIBILI_WATCH_FOLLOW: "false"  # 可选，观看只看关注列表 UP 主视频
 ```
 
 ---
@@ -283,9 +288,9 @@ tasks:
 
 **功能：**
 - 自动签到致美化网站
-- 获取锋币奖励信息
-- 获取连续签到天数
-- 自动识别"已签到/未到签到时间"状态，不误报失败
+- 先调用 `getUserMission` 接口获取当前签到状态（上次签到时间、今日锋币、连续签到天数、账户锋币总数）
+- 若今日已签到（上次签到日期为今天且今日已获锋币 > 0）则跳过，不误报失败
+- 再调用 `userMission` 接口完成签到并获取锋币奖励
 
 **环境变量：**
 - `ZHUTIX_COOKIE`: 登录 Cookie（必需，格式: `key1=value1; key2=value2`）
@@ -294,13 +299,6 @@ tasks:
 
 **依赖：**
 - `curl_cffi`: 用于模拟浏览器请求，绕过反爬虫
-
-**状态码说明：**
-致美化 B2 主题 `userMission` 接口可能返回简单状态码：
-- 正常 dict → 签到成功，包含锋币奖励信息
-- `3` → 今日已签到（不算失败）
-- `1` → 未到签到时间，签到周期尚未重置（不算失败）
-- 其他未知响应 → 按失败处理，触发通知
 
 **配置示例：**
 ```yaml

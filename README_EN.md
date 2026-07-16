@@ -172,11 +172,13 @@ python manage.py shell        # Enter container
 python manage.py reload       # Reload configuration
 
 # Task Execution
-python manage.py list           # List scheduled tasks
-python manage.py run TaskName   # Run specific task
-python manage.py run --all      # Run all enabled tasks
-python manage.py tasklogs       # View task logs
-python manage.py validate       # Validate configuration
+python manage.py list               # List scheduled tasks
+python manage.py run TaskName       # Run specific task (in container, container must be running)
+python manage.py run --all          # Run all enabled tasks (in container)
+python manage.py run-local TaskName # Run task locally (no Docker required)
+python manage.py run-local --all    # Run all enabled tasks locally
+python manage.py tasklogs           # View task logs
+python manage.py validate           # Validate configuration
 
 # System Maintenance
 python manage.py build              # Build image

@@ -13,15 +13,16 @@ Bilibili 自动签到任务 v2
 - 移除已下线的直播区签到接口
 - 所有响应统一 None 安全处理，避免 'NoneType' object has no attribute 'get'
 
-环境变量（与原 bilibili.py 保持兼容）:
+环境变量（统一使用 BILIBILI_ 前缀）:
 - BILIBILI_COOKIE: B站登录 Cookie（必需，需包含 SESSDATA 和 bili_jct）
-- COIN_NUM: 每日投币数量（默认 5）
-- SILVER2COIN: 是否兑换银瓜子为硬币（true/false，默认 false）
-- RECEIVE_VIP_PRIVILEGE: 是否领取大会员权益（true/false，默认 false）
-- SKIP_SHARE: 是否跳过分享任务（true/false，默认 false）
-- SKIP_COIN: 是否跳过投币任务（true/false，默认 false，节省硬币）
-- LIVE_ROOM_DANMU: 直播间弹幕签到 room_id，多个用逗号分隔（可选）
-- LIVE_DANMU_MSG: 弹幕内容（默认 "签到"）
+- BILIBILI_COIN_NUM: 每日投币数量（默认 5）
+- BILIBILI_COIN_FOLLOW: 投币是否只给关注列表 UP 主（true/false，默认 false）
+- BILIBILI_WATCH_FOLLOW: 观看是否只看关注列表 UP 主视频（true/false，默认 false）
+- BILIBILI_SILVER2COIN: 是否兑换银瓜子为硬币（true/false，默认 false）
+- BILIBILI_RECEIVE_VIP_PRIVILEGE: 是否领取大会员权益（true/false，默认 false）
+- BILIBILI_SKIP_SHARE: 是否跳过分享任务（true/false，默认 false）
+- BILIBILI_SKIP_COIN: 是否跳过投币任务（true/false，默认 false，节省硬币）
+- BILIBILI_PROXY: HTTP(S) 代理地址（可选，如 http://127.0.0.1:7890，留空则直连）
 
 依赖:
 - requests
@@ -33,6 +34,7 @@ import json
 import time
 import random
 import requests
+from urllib.parse import urlencode
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from logger import log_info, log_success, log_error, log_warning, log_debug
@@ -47,6 +49,9 @@ UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
+
+# 代理（由 main() 根据 BILIBILI_PROXY 设置，requests 代理字典或 None）
+PROXIES = None
 
 
 # ============ Cookie 解析 ============
@@ -100,7 +105,7 @@ def make_headers(sessdata: str, bili_jct: str, referer: str = "https://www.bilib
 def http_get(url: str, headers: dict, timeout: int = 15) -> dict:
     """GET 请求，返回解析后的 JSON dict，异常时返回 {"code": -1, "message": ...}"""
     try:
-        resp = requests.get(url=url, headers=headers, timeout=timeout)
+        resp = requests.get(url=url, headers=headers, timeout=timeout, proxies=PROXIES)
         return resp.json()
     except requests.exceptions.HTTPError as e:
         return {"code": -1, "message": f"HTTP {e.response.status_code}"}
@@ -112,7 +117,7 @@ def http_post(url: str, data: dict, headers: dict, timeout: int = 15) -> dict:
     """POST 请求（表单编码），返回解析后的 JSON dict"""
     headers = {**headers, "Content-Type": "application/x-www-form-urlencoded"}
     try:
-        resp = requests.post(url=url, data=data, headers=headers, timeout=timeout)
+        resp = requests.post(url=url, data=data, headers=headers, timeout=timeout, proxies=PROXIES)
         return resp.json()
     except requests.exceptions.HTTPError as e:
         return {"code": -1, "message": f"HTTP {e.response.status_code}"}
@@ -201,25 +206,140 @@ def get_popular_videos(sessdata: str, bili_jct: str, count: int = 20) -> list:
     ]
 
 
-def pick_video(sessdata: str, bili_jct: str) -> dict:
-    """从热门视频中随机挑选一个"""
+def get_followings(sessdata: str, bili_jct: str, uid: int, ps: int = 50) -> list:
+    """获取关注列表中的 UP 主 mid
+
+    Args:
+        uid: 当前登录用户 UID
+        ps: 单次拉取数量（最多 50）
+
+    Returns:
+        list: 关注 UP 主的 mid 列表
+    """
+    url = f"{BASE_URL}/x/relation/followings"
+    params = {"vmid": uid, "ps": ps, "pn": 1}
+    headers = make_headers(sessdata, bili_jct)
+    resp = http_get(f"{url}?{urlencode(params)}", headers)
+    if not resp or resp.get("code") != 0:
+        return []
+    return [u.get("mid") for u in (resp.get("data") or {}).get("list") or [] if u.get("mid")]
+
+
+def _parse_length(length) -> int:
+    """将视频时长字符串 'mm:ss' / 'hh:mm:ss' 转为秒数，解析失败返回 100"""
+    try:
+        parts = [int(p) for p in str(length).split(":")]
+    except (ValueError, AttributeError):
+        return 100
+    if len(parts) == 3:
+        return parts[0] * 3600 + parts[1] * 60 + parts[2]
+    if len(parts) == 2:
+        return parts[0] * 60 + parts[1]
+    if len(parts) == 1:
+        return parts[0]
+    return 100
+
+
+def get_following_videos(
+    sessdata: str, bili_jct: str, uid: int, per_up: int = 2, max_videos: int = 20
+) -> list:
+    """获取关注 UP 主最近发布的视频（含 aid/bvid/cid/title/duration）
+
+    遍历关注列表，对每个 UP 主调用 /x/space/arc/search 拉取其最新投稿，
+    汇总后返回。space/arc/search 返回的 cid 常为 0，观看前需另行解析。
+
+    Args:
+        uid: 当前登录用户 UID
+        per_up: 每个 UP 主最多取多少条视频
+        max_videos: 最多收集多少条视频（避免关注过多时请求爆炸）
+
+    Returns:
+        list: 视频字典列表，字段同 get_popular_videos
+    """
+    mids = get_followings(sessdata, bili_jct, uid)
+    if not mids:
+        return []
+
+    videos = []
+    for mid in mids:
+        if len(videos) >= max_videos:
+            break
+        url = f"{BASE_URL}/x/space/arc/search"
+        params = {"mid": mid, "ps": per_up, "pn": 1, "order": "pubdate"}
+        headers = make_headers(sessdata, bili_jct)
+        resp = http_get(f"{url}?{urlencode(params)}", headers)
+        if not resp or resp.get("code") != 0:
+            continue
+        vlist = (resp.get("data") or {}).get("list") or {}
+        vlist = vlist.get("vlist") or []
+        for v in vlist:
+            if not v.get("aid"):
+                continue
+            videos.append(
+                {
+                    "aid": v.get("aid"),
+                    "bvid": v.get("bvid"),
+                    "cid": v.get("cid", 0),
+                    "title": v.get("title", ""),
+                    "duration": _parse_length(v.get("length", "100")),
+                    "owner": v.get("author", ""),
+                }
+            )
+            if len(videos) >= max_videos:
+                break
+    return videos
+
+
+def get_video_cid(sessdata: str, bili_jct: str, bvid: str) -> int:
+    """通过 bvid 获取视频真实 cid（space/arc/search 返回的 cid 常为 0）"""
+    url = f"{BASE_URL}/x/web-interface/view?bvid={bvid}"
+    headers = make_headers(sessdata, bili_jct)
+    resp = http_get(url, headers)
+    if resp and resp.get("code") == 0:
+        return (resp.get("data") or {}).get("cid", 0)
+    return 0
+
+
+def pick_video(sessdata: str, bili_jct: str, uid: int = None, follow: bool = False) -> dict:
+    """挑选一个视频
+
+    follow=True 且能成功获取关注列表视频时，从关注 UP 主视频中随机挑选；
+    否则回退到热门视频。
+
+    Args:
+        uid: 当前登录用户 UID（follow=True 时必填）
+        follow: 是否仅从关注列表选取
+    """
+    if follow and uid:
+        videos = get_following_videos(sessdata, bili_jct, uid)
+        if videos:
+            return random.choice(videos)
+        log_warning("关注列表视频获取失败，回退到热门视频")
     videos = get_popular_videos(sessdata, bili_jct)
     if not videos:
         return {}
     return random.choice(videos)
 
 
-def do_watch(sessdata: str, bili_jct: str) -> dict:
+def do_watch(sessdata: str, bili_jct: str, uid: int = None, follow: bool = False) -> dict:
     """模拟观看视频（heartbeat 心跳上报），+5 EXP
 
-    使用 popular 接口返回的真实 cid，解决原脚本 cid=0 必失败的问题。
+    使用接口返回的真实 cid，解决原脚本 cid=0 必失败的问题。
+    follow=True 时仅观看关注 UP 主发布的视频（cid 可能为 0，需额外解析）。
     """
-    video = pick_video(sessdata, bili_jct)
+    video = pick_video(sessdata, bili_jct, uid, follow)
     if not video:
         return {"success": False, "message": "无法获取视频列表"}
 
+    # 关注列表视频的 cid 常为 0，需通过 view 接口解析真实 cid
+    cid = video.get("cid") or 0
+    if not cid and video.get("bvid"):
+        cid = get_video_cid(sessdata, bili_jct, video["bvid"])
+    if not cid:
+        return {"success": False, "message": "无法获取视频 cid"}
+
     url = f"{BASE_URL}/x/click-interface/web/heartbeat"
-    duration = video.get("duration") or 100
+    duration = int(video.get("duration") or 100)
     played = random.randint(10, min(duration, 300))
     data = {
         "aid": str(video["aid"]),
@@ -265,17 +385,18 @@ def do_share(sessdata: str, bili_jct: str) -> dict:
     return {"success": False, "message": msg}
 
 
-def do_coin(sessdata: str, bili_jct: str, count: int) -> dict:
+def do_coin(sessdata: str, bili_jct: str, count: int, uid: int = None, follow: bool = False) -> dict:
     """投币任务，每枚 +10 EXP，最多 5 枚 = 50 EXP
 
     通过预检查的 coins 字段计算还需投币数量，避免超投。
+    follow=True 时仅给关注 UP 主的视频投币。
     """
     results = []
     success_count = 0
     total_exp = 0
 
     for i in range(count):
-        video = pick_video(sessdata, bili_jct)
+        video = pick_video(sessdata, bili_jct, uid, follow)
         if not video:
             results.append({"index": i + 1, "success": False, "message": "无法获取视频"})
             continue
@@ -313,35 +434,6 @@ def do_coin(sessdata: str, bili_jct: str, count: int) -> dict:
         "target": count,
         "details": results,
     }
-
-
-def do_live_danmu(sessdata: str, bili_jct: str, room_id: int, msg: str) -> dict:
-    """直播间弹幕签到（发送一条弹幕）"""
-    url = f"{LIVE_URL}/msg/send"
-    data = {
-        "bubble": "0",
-        "msg": msg,
-        "color": "16777215",
-        "mode": "1",
-        "room_type": "0",
-        "jumpfrom": "0",
-        "reply_mid": "0",
-        "reply_attr": "0",
-        "replay_dmid": "",
-        "statistics": json.dumps({"appId": 100, "platform": 5}),
-        "fontsize": "25",
-        "rnd": str(int(time.time())),
-        "roomid": str(room_id),
-        "csrf": bili_jct,
-        "csrf_token": bili_jct,
-    }
-    headers = make_headers(sessdata, bili_jct, f"https://live.bilibili.com/{room_id}")
-    headers["Origin"] = "https://live.bilibili.com"
-    resp = http_post(url, data, headers)
-    if resp and resp.get("code") == 0:
-        return {"success": True, "room_id": room_id, "msg": msg}
-    err_msg = resp.get("message", resp.get("msg", "未知错误")) if resp else "请求失败"
-    return {"success": False, "room_id": room_id, "msg": msg, "message": err_msg}
 
 
 def get_vip_privilege_list(sessdata: str, bili_jct: str) -> dict:
@@ -385,7 +477,7 @@ def get_wallet_status(sessdata: str, bili_jct: str) -> dict:
 def get_config() -> dict:
     """从环境变量获取配置
 
-    与原 bilibili.py 保持兼容，新增 SKIP_COIN 和 LIVE_ROOM_DANMU 选项。
+    所有配置项统一使用 BILIBILI_ 前缀，与其他任务的命名规范保持一致。
     """
     cookie = os.environ.get("BILIBILI_COOKIE", "")
     sessdata, bili_jct = parse_cookie_fields(cookie)
@@ -399,24 +491,17 @@ def get_config() -> dict:
         except ValueError:
             return default
 
-    live_rooms_raw = os.environ.get("LIVE_ROOM_DANMU", "").strip()
-    live_rooms = []
-    if live_rooms_raw:
-        for r in live_rooms_raw.split(","):
-            r = r.strip()
-            if r.isdigit():
-                live_rooms.append(int(r))
-
     return {
         "sessdata": sessdata,
         "bili_jct": bili_jct,
-        "coin_num": env_int("COIN_NUM", 5),
-        "silver2coin": env_bool("SILVER2COIN"),
-        "receive_vip_privilege": env_bool("RECEIVE_VIP_PRIVILEGE"),
-        "skip_share": env_bool("SKIP_SHARE"),
-        "skip_coin": env_bool("SKIP_COIN"),
-        "live_rooms": live_rooms,
-        "live_danmu_msg": os.environ.get("LIVE_DANMU_MSG", "签到"),
+        "coin_num": env_int("BILIBILI_COIN_NUM", 5),
+        "coin_follow": env_bool("BILIBILI_COIN_FOLLOW"),
+        "watch_follow": env_bool("BILIBILI_WATCH_FOLLOW"),
+        "silver2coin": env_bool("BILIBILI_SILVER2COIN"),
+        "receive_vip_privilege": env_bool("BILIBILI_RECEIVE_VIP_PRIVILEGE"),
+        "skip_share": env_bool("BILIBILI_SKIP_SHARE"),
+        "skip_coin": env_bool("BILIBILI_SKIP_COIN"),
+        "proxy": os.environ.get("BILIBILI_PROXY", ""),
     }
 
 
@@ -463,8 +548,11 @@ def run_all(config: dict) -> dict:
         tasks.append({"task": "watch", "success": True, "exp": 0, "message": "今日已完成"})
         log_info("观看任务: 今日已完成")
     else:
-        log_info("执行观看任务...")
-        r = do_watch(sessdata, bili_jct)
+        if config["watch_follow"]:
+            log_info("执行观看任务（仅关注列表 UP 主）...")
+        else:
+            log_info("执行观看任务...")
+        r = do_watch(sessdata, bili_jct, user["uid"], config["watch_follow"])
         if r["success"]:
             total_exp += r["exp"]
             log_success(f"观看任务完成: +{r['exp']} EXP 《{r.get('video', '')}》")
@@ -506,7 +594,7 @@ def run_all(config: dict) -> dict:
             log_info(f"投币任务: 今日已满 ({coins_done // 10}/{config['coin_num']})")
         else:
             log_info(f"投币任务: 今日已投 {coins_done // 10}，还需 {remaining} 枚")
-            r = do_coin(sessdata, bili_jct, remaining)
+            r = do_coin(sessdata, bili_jct, remaining, user["uid"], config["coin_follow"])
             if r["success"]:
                 total_exp += r["exp"]
                 log_success(f"投币任务完成: {r['count']}/{r['target']} 枚，+{r['exp']} EXP")
@@ -520,22 +608,7 @@ def run_all(config: dict) -> dict:
                     log_warning(f"投币任务失败: {last.get('message', '未知错误')}")
             tasks.append({"task": "coin", **r})
 
-    # 7. 直播间弹幕签到（可选）
-    if config["live_rooms"]:
-        log_info(f"执行直播间弹幕签到（{len(config['live_rooms'])} 个房间）...")
-        danmu_results = []
-        for idx, room_id in enumerate(config["live_rooms"]):
-            r = do_live_danmu(sessdata, bili_jct, room_id, config["live_danmu_msg"])
-            if r["success"]:
-                log_success(f"弹幕签到成功: 房间 {room_id}")
-            else:
-                log_warning(f"弹幕签到失败: 房间 {room_id} - {r.get('message')}")
-            danmu_results.append(r)
-            if idx < len(config["live_rooms"]) - 1:
-                time.sleep(2)
-        tasks.append({"task": "live_danmu", "success": all(r["success"] for r in danmu_results), "rooms": danmu_results})
-
-    # 8. 大会员权益（可选）
+    # 7. 大会员权益（可选）
     if config["receive_vip_privilege"]:
         if is_vip(user):
             log_info("检查大会员权益...")
@@ -556,7 +629,7 @@ def run_all(config: dict) -> dict:
             log_info("非大会员，跳过权益领取")
             tasks.append({"task": "vip_privilege", "success": True, "message": "非大会员"})
 
-    # 9. 银瓜子换硬币（可选）
+    # 8. 银瓜子换硬币（可选）
     if config["silver2coin"]:
         log_info("执行银瓜子兑换...")
         r = silver2coin(sessdata, bili_jct)
@@ -566,7 +639,7 @@ def run_all(config: dict) -> dict:
             log_warning(f"兑换失败: {r.get('message', '未知错误')}")
         tasks.append({"task": "silver2coin", **r})
 
-    # 10. 汇总状态
+    # 9. 汇总状态
     wallet = get_wallet_status(sessdata, bili_jct)
     user_after = get_user_info(sessdata, bili_jct)
 
@@ -595,7 +668,6 @@ def format_result(result: dict) -> str:
         "watch": "观看",
         "share": "分享",
         "coin": "投币",
-        "live_danmu": "弹幕签到",
         "vip_privilege": "会员权益",
         "silver2coin": "银瓜子兑换",
     }
@@ -657,9 +729,18 @@ def main() -> int:
         log_error("请确认 Cookie 完整（需包含 SESSDATA 和 bili_jct 两个字段）")
         return 1
 
-    log_debug(f"配置: coin_num={config['coin_num']} skip_coin={config['skip_coin']} "
+    # 设置代理（全局，所有请求共用）
+    proxy = config.get("proxy", "")
+    if proxy:
+        globals()["PROXIES"] = {"http": proxy, "https": proxy}
+        log_info(f"已启用代理: {proxy}")
+    else:
+        log_debug("未配置代理，使用直连")
+
+    log_debug(f"配置: coin_num={config['coin_num']} coin_follow={config['coin_follow']} "
+              f"watch_follow={config['watch_follow']} skip_coin={config['skip_coin']} "
               f"skip_share={config['skip_share']} silver2coin={config['silver2coin']} "
-              f"receive_vip={config['receive_vip_privilege']} live_rooms={config['live_rooms']}")
+              f"receive_vip={config['receive_vip_privilege']}")
 
     try:
         result = run_all(config)

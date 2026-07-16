@@ -173,11 +173,13 @@ python manage.py shell        # 进入容器
 python manage.py reload       # 重新加载配置
 
 # 任务执行
-python manage.py list           # 查看定时任务计划
-python manage.py run TaskName   # 执行指定任务
-python manage.py run --all      # 执行所有已启用任务
-python manage.py tasklogs       # 查看任务日志
-python manage.py validate       # 验证配置
+python manage.py list               # 查看定时任务计划
+python manage.py run TaskName       # 执行指定任务（容器内，需先启动容器）
+python manage.py run --all          # 执行所有已启用任务（容器内）
+python manage.py run-local TaskName # 本地直接执行任务（不依赖 Docker）
+python manage.py run-local --all    # 本地执行所有已启用任务
+python manage.py tasklogs           # 查看任务日志
+python manage.py validate           # 验证配置
 
 # 系统维护
 python manage.py build              # 构建镜像
