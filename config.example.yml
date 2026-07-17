@@ -76,6 +76,7 @@ tasks:
       # BILIBILI_RECEIVE_VIP_PRIVILEGE: "false"   # 是否领取大会员权益: true/false，默认false
       # BILIBILI_COIN_FOLLOW: "false"             # 投币是否只给关注列表 UP 主: true/false，默认false
       # BILIBILI_WATCH_FOLLOW: "false"            # 观看是否只看关注列表 UP 主视频: true/false，默认false
+      # BILIBILI_FOLLOW_SAMPLE: "10"             # 关注列表随机采样 UP 主数量（仅 follow 模式生效），默认10，越小请求越少
 
   - name: "V2EX"
     schedule: "0 9 * * *"

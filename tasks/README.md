@@ -12,7 +12,7 @@
 | [tieba.py](#tiebapy) | 百度贴吧自动签到 | `TIEBA_COOKIE` | - |
 | [fnclub.py](#fnclubpy) | 飞牛Nas论坛自动签到 | `FNNAS_COOKIE` | - |
 | [aliyunpan.py](#aliyunpanpy) | 阿里云盘自动签到 | `ALIYUN_REFRESH_TOKEN` | - |
-| [bilibili.py](#bilibilipy) | B站多功能签到 | `BILIBILI_COOKIE` | `BILIBILI_COIN_NUM`, `BILIBILI_COIN_FOLLOW`, `BILIBILI_WATCH_FOLLOW`, `BILIBILI_SKIP_COIN`, `BILIBILI_SKIP_SHARE`, `BILIBILI_SILVER2COIN`, `BILIBILI_RECEIVE_VIP_PRIVILEGE`, `BILIBILI_PROXY` |
+| [bilibili.py](#bilibilipy) | B站多功能签到 | `BILIBILI_COOKIE` | `BILIBILI_COIN_NUM`, `BILIBILI_COIN_FOLLOW`, `BILIBILI_WATCH_FOLLOW`, `BILIBILI_FOLLOW_SAMPLE`, `BILIBILI_SKIP_COIN`, `BILIBILI_SKIP_SHARE`, `BILIBILI_SILVER2COIN`, `BILIBILI_RECEIVE_VIP_PRIVILEGE`, `BILIBILI_PROXY` |
 | [v2ex.py](#v2expy) | V2EX 论坛自动签到 | `V2EX_COOKIE` | `V2EX_PROXY`, `V2EX_SSL_VERIFY` |
 | [nodeseek.py](#nodeseekpy) | NodeSeek 论坛自动签到 | `NODESEEK_COOKIE` | `NODESEEK_RANDOM`, `NODESEEK_PROXY` |
 | [zhutix.py](#zhutixpy) | 致美化网站自动签到 | `ZHUTIX_COOKIE` | `ZHUTIX_PROXY` |
@@ -187,7 +187,8 @@ tasks:
 - 从 `BILIBILI_COOKIE` 中提取 `SESSDATA` 和 `bili_jct` 双字段独立使用，兼容 `;` 和 `; ` 两种分隔符，规避 cookie 字符串分隔符差异导致的 CSRF 解析失败问题
 - 通过 `/x/member/web/exp/reward` 预检查任务状态，已完成任务自动跳过
 - 观看任务改用 popular 接口获取视频（含真实 cid）+ heartbeat 心跳上报；开启 `BILIBILI_WATCH_FOLLOW` 后仅观看关注 UP 主视频（cid 为 0 时通过 view 接口解析真实 cid）
-- 投币/观看开启 `BILIBILI_COIN_FOLLOW` / `BILIBILI_WATCH_FOLLOW` 时，通过 `/x/relation/followings` 获取关注列表，再对每个 UP 主调用 `/x/space/arc/search` 拉取视频，仅对这些视频投币/观看
+- 投币/观看开启 `BILIBILI_COIN_FOLLOW` / `BILIBILI_WATCH_FOLLOW` 时，优先通过动态 feed 接口（`/x/polymer/web-dynamic/v1/feed/all?type=video`）单请求拉取关注 UP 主最新视频，请求量最小、风控最友好（走代理 IP 时尤其明显）；动态 feed 失败时回退到「随机采样 `BILIBILI_FOLLOW_SAMPLE` 个 UP 主 + `/x/space/arc/search` 取最新投稿」；两次均失败则本轮自动降级为热门视频（仅告警一次）
+- 关注列表视频在整轮任务中只拉取一次并复用（供观看/投币），避免重复请求触发 B站风控限流
 - 大会员判定基于 `vipStatus`（生效中），覆盖月度/年度两种类型
 - 所有响应统一 None 安全处理，避免 `'NoneType' object has no attribute 'get'`
 
@@ -197,6 +198,7 @@ tasks:
 - `BILIBILI_COIN_NUM`: 每日投币数量（默认5）
 - `BILIBILI_COIN_FOLLOW`: 投币是否只给关注列表 UP 主（true/false，默认false）
 - `BILIBILI_WATCH_FOLLOW`: 观看是否只看关注列表 UP 主视频（true/false，默认false）
+- `BILIBILI_FOLLOW_SAMPLE`: 关注列表随机采样 UP 主数量（默认10，越小请求越少；仅 follow 模式生效）
 - `BILIBILI_SKIP_COIN`: 是否跳过投币任务（true/false，默认false，节省硬币）
 - `BILIBILI_SKIP_SHARE`: 是否跳过分享任务（true/false，默认false）
 - `BILIBILI_SILVER2COIN`: 是否兑换银瓜子为硬币（true/false，默认false）
@@ -222,6 +224,7 @@ tasks:
       BILIBILI_RECEIVE_VIP_PRIVILEGE: "false"
       # BILIBILI_COIN_FOLLOW: "false"   # 可选，投币只给关注列表 UP 主
       # BILIBILI_WATCH_FOLLOW: "false"  # 可选，观看只看关注列表 UP 主视频
+      # BILIBILI_FOLLOW_SAMPLE: "10"    # 可选，关注列表随机采样 UP 主数量（仅 follow 模式生效）
 ```
 
 ---

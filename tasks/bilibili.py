@@ -18,6 +18,13 @@ Bilibili 自动签到任务 v2
 - BILIBILI_COIN_NUM: 每日投币数量（默认 5）
 - BILIBILI_COIN_FOLLOW: 投币是否只给关注列表 UP 主（true/false，默认 false）
 - BILIBILI_WATCH_FOLLOW: 观看是否只看关注列表 UP 主视频（true/false，默认 false）
+- BILIBILI_FOLLOW_SAMPLE: 关注列表随机采样 UP 主数量（默认 10，越小请求越少）
+
+关注列表视频获取策略:
+- 优先通过动态 feed 接口（/x/polymer/web-dynamic/v1/feed/all?type=video）单请求拉取
+  关注 UP 主最新视频，请求量最小、风控友好（尤其走代理 IP 时）；
+- 动态 feed 失败时回退到「随机采样 FOLLOW_SAMPLE 个 UP 主 + space/arc/search 取最新投稿」；
+- 两次均失败则本轮自动降级为热门视频（仅告警一次，不重复刷屏）。
 - BILIBILI_SILVER2COIN: 是否兑换银瓜子为硬币（true/false，默认 false）
 - BILIBILI_RECEIVE_VIP_PRIVILEGE: 是否领取大会员权益（true/false，默认 false）
 - BILIBILI_SKIP_SHARE: 是否跳过分享任务（true/false，默认 false）
@@ -221,8 +228,61 @@ def get_followings(sessdata: str, bili_jct: str, uid: int, ps: int = 50) -> list
     headers = make_headers(sessdata, bili_jct)
     resp = http_get(f"{url}?{urlencode(params)}", headers)
     if not resp or resp.get("code") != 0:
+        log_debug(f"关注列表接口失败: code={resp.get('code') if resp else 'N/A'} "
+                  f"msg={resp.get('message') if resp else '请求失败'}")
         return []
     return [u.get("mid") for u in (resp.get("data") or {}).get("list") or [] if u.get("mid")]
+
+
+def get_dynamic_feed_videos(sessdata: str, bili_jct: str, max_videos: int = 20) -> list:
+    """通过 Web 动态 feed 一次性获取关注 UP 主的最新视频
+
+    使用 /x/polymer/web-dynamic/v1/feed/all 接口，单次请求即可拿到关注 UP 主
+    投稿的视频动态，无需逐个 UP 主调用 space/arc/search，请求量从「1+N」降到 1，
+    大幅降低触发 B站风控（-412）的概率，尤其适合走代理 IP 的场景。
+
+    动态返回的视频无 cid（cid=0），观看前需通过 view 接口按 bvid 解析。
+
+    Args:
+        max_videos: 最多收集多少条视频
+
+    Returns:
+        list: 视频字典列表，字段同 get_popular_videos
+    """
+    url = f"{BASE_URL}/x/polymer/web-dynamic/v1/feed/all"
+    params = {"timezone_offset": -480, "type": "video", "page": 1}
+    headers = make_headers(sessdata, bili_jct, "https://t.bilibili.com/")
+    resp = http_get(f"{url}?{urlencode(params)}", headers)
+    if not resp or resp.get("code") != 0:
+        log_debug(f"动态 feed 接口失败: code={resp.get('code') if resp else 'N/A'} "
+                  f"msg={resp.get('message') if resp else '请求失败'}")
+        return []
+
+    items = (resp.get("data") or {}).get("items") or []
+    videos = []
+    for item in items:
+        if item.get("type") != "DYNAMIC_TYPE_AV":
+            continue
+        modules = item.get("modules") or {}
+        major = ((modules.get("module_dynamic") or {}).get("major")) or {}
+        archive = major.get("archive") or {}
+        aid = archive.get("aid")
+        if not aid:
+            continue
+        author = (modules.get("module_author") or {}).get("name", "")
+        videos.append(
+            {
+                "aid": int(aid) if str(aid).isdigit() else aid,
+                "bvid": archive.get("bvid"),
+                "cid": 0,  # 动态不返回 cid，观看时按 bvid 解析
+                "title": archive.get("title", ""),
+                "duration": _parse_length(archive.get("duration_text", "100")),
+                "owner": author,
+            }
+        )
+        if len(videos) >= max_videos:
+            break
+    return videos
 
 
 def _parse_length(length) -> int:
@@ -241,24 +301,38 @@ def _parse_length(length) -> int:
 
 
 def get_following_videos(
-    sessdata: str, bili_jct: str, uid: int, per_up: int = 2, max_videos: int = 20
+    sessdata: str, bili_jct: str, uid: int, sample: int = 10, per_up: int = 1, max_videos: int = 20
 ) -> list:
     """获取关注 UP 主最近发布的视频（含 aid/bvid/cid/title/duration）
 
-    遍历关注列表，对每个 UP 主调用 /x/space/arc/search 拉取其最新投稿，
-    汇总后返回。space/arc/search 返回的 cid 常为 0，观看前需另行解析。
+    优先策略：动态 feed 单请求拉取（get_dynamic_feed_videos），请求量最小、
+    风控最友好。若动态 feed 失败（返回空），回退到「随机采样 sample 个 UP 主，
+    每个取 per_up 条最新投稿」的 space/arc/search 方案。space/arc/search 对
+    IP 风控敏感（走代理时易返回 -412），故仅作兜底。
 
     Args:
         uid: 当前登录用户 UID
-        per_up: 每个 UP 主最多取多少条视频
-        max_videos: 最多收集多少条视频（避免关注过多时请求爆炸）
+        sample: 回退方案中随机采样的 UP 主数量（默认 10）
+        per_up: 回退方案中每个 UP 主取多少条最新视频（默认 1）
+        max_videos: 最多收集多少条视频（安全上限，默认 20）
 
     Returns:
         list: 视频字典列表，字段同 get_popular_videos
     """
+    # 优先：动态 feed 单请求
+    videos = get_dynamic_feed_videos(sessdata, bili_jct, max_videos)
+    if videos:
+        return videos
+
+    # 兜底：随机采样 UP 主 + space/arc/search
+    log_debug("动态 feed 未取到视频，回退到关注列表采样方案")
     mids = get_followings(sessdata, bili_jct, uid)
     if not mids:
         return []
+
+    # 随机采样指定数量的 UP 主，避免每次都打全部关注列表
+    if len(mids) > sample:
+        mids = random.sample(mids, sample)
 
     videos = []
     for mid in mids:
@@ -300,7 +374,9 @@ def get_video_cid(sessdata: str, bili_jct: str, bvid: str) -> int:
     return 0
 
 
-def pick_video(sessdata: str, bili_jct: str, uid: int = None, follow: bool = False) -> dict:
+def pick_video(
+    sessdata: str, bili_jct: str, uid: int = None, follow: bool = False, following_pool: list = None
+) -> dict:
     """挑选一个视频
 
     follow=True 且能成功获取关注列表视频时，从关注 UP 主视频中随机挑选；
@@ -309,11 +385,15 @@ def pick_video(sessdata: str, bili_jct: str, uid: int = None, follow: bool = Fal
     Args:
         uid: 当前登录用户 UID（follow=True 时必填）
         follow: 是否仅从关注列表选取
+        following_pool: 预先拉取好的关注列表视频池（由 run_all 统一拉一次后复用），
+            传入后不再重复请求接口，避免高频触发 B站风控限流
     """
-    if follow and uid:
-        videos = get_following_videos(sessdata, bili_jct, uid)
-        if videos:
-            return random.choice(videos)
+    if follow:
+        # 优先使用复用池；未提供时（兼容旧调用）才临时拉取
+        if following_pool is None and uid:
+            following_pool = get_following_videos(sessdata, bili_jct, uid)
+        if following_pool:
+            return random.choice(following_pool)
         log_warning("关注列表视频获取失败，回退到热门视频")
     videos = get_popular_videos(sessdata, bili_jct)
     if not videos:
@@ -321,13 +401,15 @@ def pick_video(sessdata: str, bili_jct: str, uid: int = None, follow: bool = Fal
     return random.choice(videos)
 
 
-def do_watch(sessdata: str, bili_jct: str, uid: int = None, follow: bool = False) -> dict:
+def do_watch(
+    sessdata: str, bili_jct: str, uid: int = None, follow: bool = False, following_pool: list = None
+) -> dict:
     """模拟观看视频（heartbeat 心跳上报），+5 EXP
 
     使用接口返回的真实 cid，解决原脚本 cid=0 必失败的问题。
     follow=True 时仅观看关注 UP 主发布的视频（cid 可能为 0，需额外解析）。
     """
-    video = pick_video(sessdata, bili_jct, uid, follow)
+    video = pick_video(sessdata, bili_jct, uid, follow, following_pool)
     if not video:
         return {"success": False, "message": "无法获取视频列表"}
 
@@ -385,7 +467,9 @@ def do_share(sessdata: str, bili_jct: str) -> dict:
     return {"success": False, "message": msg}
 
 
-def do_coin(sessdata: str, bili_jct: str, count: int, uid: int = None, follow: bool = False) -> dict:
+def do_coin(
+    sessdata: str, bili_jct: str, count: int, uid: int = None, follow: bool = False, following_pool: list = None
+) -> dict:
     """投币任务，每枚 +10 EXP，最多 5 枚 = 50 EXP
 
     通过预检查的 coins 字段计算还需投币数量，避免超投。
@@ -396,7 +480,7 @@ def do_coin(sessdata: str, bili_jct: str, count: int, uid: int = None, follow: b
     total_exp = 0
 
     for i in range(count):
-        video = pick_video(sessdata, bili_jct, uid, follow)
+        video = pick_video(sessdata, bili_jct, uid, follow, following_pool)
         if not video:
             results.append({"index": i + 1, "success": False, "message": "无法获取视频"})
             continue
@@ -497,6 +581,7 @@ def get_config() -> dict:
         "coin_num": env_int("BILIBILI_COIN_NUM", 5),
         "coin_follow": env_bool("BILIBILI_COIN_FOLLOW"),
         "watch_follow": env_bool("BILIBILI_WATCH_FOLLOW"),
+        "follow_sample": env_int("BILIBILI_FOLLOW_SAMPLE", 10),
         "silver2coin": env_bool("BILIBILI_SILVER2COIN"),
         "receive_vip_privilege": env_bool("BILIBILI_RECEIVE_VIP_PRIVILEGE"),
         "skip_share": env_bool("BILIBILI_SKIP_SHARE"),
@@ -534,6 +619,20 @@ def run_all(config: dict) -> dict:
     tasks = []
     total_exp = 0
 
+    # 预拉取关注列表视频（仅一次，供观看/投币复用，避免重复请求触发 B站风控限流）
+    following_pool = None
+    watch_follow = config["watch_follow"]
+    coin_follow = config["coin_follow"]
+    if watch_follow or coin_follow:
+        log_debug("预拉取关注列表视频（供观看/投币复用）...")
+        following_pool = get_following_videos(sessdata, bili_jct, user["uid"], config["follow_sample"])
+        if not following_pool:
+            # 拉取失败时统一降级为热门视频，并关闭 follow 标记，
+            # 避免后续观看/投币每次都重复打印“回退到热门视频”警告
+            log_warning("关注列表视频获取失败，本轮观看/投币回退到热门视频")
+            watch_follow = False
+            coin_follow = False
+
     # 3. 登录任务（自动完成）
     if status_before.get("login"):
         tasks.append({"task": "login", "success": True, "exp": 0, "message": "今日已完成"})
@@ -548,11 +647,11 @@ def run_all(config: dict) -> dict:
         tasks.append({"task": "watch", "success": True, "exp": 0, "message": "今日已完成"})
         log_info("观看任务: 今日已完成")
     else:
-        if config["watch_follow"]:
+        if watch_follow:
             log_info("执行观看任务（仅关注列表 UP 主）...")
         else:
             log_info("执行观看任务...")
-        r = do_watch(sessdata, bili_jct, user["uid"], config["watch_follow"])
+        r = do_watch(sessdata, bili_jct, user["uid"], watch_follow, following_pool)
         if r["success"]:
             total_exp += r["exp"]
             log_success(f"观看任务完成: +{r['exp']} EXP 《{r.get('video', '')}》")
@@ -594,7 +693,7 @@ def run_all(config: dict) -> dict:
             log_info(f"投币任务: 今日已满 ({coins_done // 10}/{config['coin_num']})")
         else:
             log_info(f"投币任务: 今日已投 {coins_done // 10}，还需 {remaining} 枚")
-            r = do_coin(sessdata, bili_jct, remaining, user["uid"], config["coin_follow"])
+            r = do_coin(sessdata, bili_jct, remaining, user["uid"], coin_follow, following_pool)
             if r["success"]:
                 total_exp += r["exp"]
                 log_success(f"投币任务完成: {r['count']}/{r['target']} 枚，+{r['exp']} EXP")
