@@ -157,6 +157,302 @@ def toggle_task_enabled(task_name: str) -> Optional[bool]:
         return None
 
 
+def validate_cron_expression(expr: str) -> Dict[str, Any]:
+    """验证 cron 表达式并返回下次执行时间和调度说明
+
+    Returns:
+        dict: {"valid": bool, "error"?: str, "next_run"?: str, "description"?: str}
+    """
+    try:
+        from croniter import croniter
+
+        expr = (expr or "").strip()
+        if not expr:
+            return {"valid": False, "error": "Cron 表达式不能为空"}
+
+        parts = expr.split()
+        if len(parts) != 5:
+            return {
+                "valid": False,
+                "error": f"Cron 表达式必须为 5 段（分 时 日 月 周），当前 {len(parts)} 段",
+            }
+
+        if not croniter.is_valid(expr):
+            return {"valid": False, "error": "Cron 表达式语法无效"}
+
+        itr = croniter(expr, datetime.now())
+        next_time = itr.get_next(datetime)
+        return {
+            "valid": True,
+            "next_run": next_time.strftime("%Y-%m-%d %H:%M"),
+            "description": parse_cron(expr),
+        }
+    except Exception as e:
+        return {"valid": False, "error": f"验证失败: {str(e)}"}
+
+
+def script_path_exists(script_path: str) -> bool:
+    """检查脚本文件是否存在（兼容容器和宿主机两种路径布局）"""
+    if not script_path:
+        return False
+    p = PROJECT_ROOT / script_path
+    if p.exists():
+        return True
+    p = PROJECT_ROOT.parent / script_path
+    return p.exists()
+
+
+def _collect_top_level_anchors(doc) -> Dict[int, str]:
+    """收集顶层（非 tasks 段）所有带锚点的值，返回 {id(node): anchor_name}"""
+    anchors: Dict[int, str] = {}
+    if not doc:
+        return anchors
+    try:
+        for key, val in doc.items():
+            if key == "tasks":
+                continue
+            anc = getattr(val, "anchor", None)
+            if anc is not None:
+                anc_val = getattr(anc, "value", None)
+                if anc_val:
+                    anchors[id(val)] = anc_val
+    except Exception:
+        pass
+    return anchors
+
+
+def get_task_detail(task_name: str) -> Optional[Dict[str, Any]]:
+    """获取任务详情（包含 env vars 和别名信息），用于编辑表单初始化
+
+    使用 ruamel.yaml 加载以保留锚点信息，并通过 id 比对识别别名引用。
+    """
+    try:
+        from ruamel.yaml import YAML
+
+        ry = YAML()
+        ry.preserve_quotes = True
+
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            doc = ry.load(f)
+
+        if not doc or "tasks" not in doc:
+            return None
+
+        anchors = _collect_top_level_anchors(doc)
+
+        target_task = None
+        all_names: List[str] = []
+        for task in doc["tasks"]:
+            name = task.get("name", "")
+            all_names.append(str(name))
+            if (
+                isinstance(name, str)
+                and name.lower() == task_name.lower()
+                and target_task is None
+            ):
+                target_task = task
+
+        if target_task is None:
+            return None
+
+        # 构建 env 列表，标记别名引用
+        env_list = []
+        env = target_task.get("env") or {}
+        for key, value in env.items():
+            is_alias = id(value) in anchors
+            alias_target = anchors.get(id(value))
+            env_list.append(
+                {
+                    "key": str(key),
+                    "value": "" if value is None else str(value),
+                    "is_alias": is_alias,
+                    "alias_target": alias_target,
+                }
+            )
+
+        schedule = str(target_task.get("schedule", ""))
+        return {
+            "name": str(target_task.get("name", "")),
+            "description": str(target_task.get("description", "")),
+            "schedule": schedule,
+            "script": str(target_task.get("script", "")),
+            "enabled": bool(target_task.get("enabled", True)),
+            "env": env_list,
+            "script_exists": script_path_exists(str(target_task.get("script", ""))),
+            "all_task_names": all_names,
+            "original_name": task_name,
+        }
+    except Exception as e:
+        log_error(f"获取任务详情失败: {e}")
+        return None
+
+
+def update_task_config(
+    original_name: str, updates: Dict[str, Any]
+) -> tuple[bool, str]:
+    """更新任务配置，保留 YAML 锚点、别名与注释
+
+    采用字段级更新策略：
+    - 标量字段（name/schedule/script/description/enabled）直接覆写
+    - env 段执行键级合并：值未变的键保留原节点（保留 *proxy 别名），
+      值变更的键替换为字面量，新增键追加，删除键移除
+
+    Returns:
+        (success, message)
+    """
+    try:
+        from ruamel.yaml import YAML
+        from ruamel.yaml.comments import CommentedMap
+
+        ry = YAML()
+        ry.preserve_quotes = True
+
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            doc = ry.load(f)
+
+        if not doc or "tasks" not in doc:
+            return False, "配置文件无效或无 tasks 段"
+
+        # 定位目标任务
+        target_task = None
+        for task in doc["tasks"]:
+            name = task.get("name", "")
+            if isinstance(name, str) and name.lower() == original_name.lower():
+                target_task = task
+                break
+
+        if target_task is None:
+            return False, f"未找到任务: {original_name}"
+
+        # 名称唯一性校验（若重命名）
+        new_name = (updates.get("name") or "").strip()
+        if not new_name:
+            return False, "任务名称不能为空"
+        if new_name.lower() != original_name.lower():
+            for task in doc["tasks"]:
+                if task is target_task:
+                    continue
+                n = task.get("name", "")
+                if isinstance(n, str) and n.lower() == new_name.lower():
+                    return False, f"任务名称已存在: {new_name}"
+
+        # 更新标量字段
+        target_task["name"] = new_name
+        target_task["description"] = (updates.get("description") or "").strip()
+        target_task["schedule"] = (updates.get("schedule") or "").strip()
+        target_task["script"] = (updates.get("script") or "").strip()
+        if "enabled" in updates:
+            target_task["enabled"] = bool(updates["enabled"])
+
+        # env 段键级合并，保留未变更键的原始节点（含别名）
+        new_env_list = updates.get("env", []) or []
+        existing_env = target_task.get("env", None)
+        if existing_env is None:
+            existing_env = CommentedMap()
+            target_task["env"] = existing_env
+
+        # 收集表单中的键（跳过空键）
+        form_items: List[Dict[str, str]] = []
+        for item in new_env_list:
+            key = (item.get("key") or "").strip()
+            if not key:
+                continue
+            form_items.append({"key": key, "value": item.get("value", "") or ""})
+
+        new_keys = {it["key"] for it in form_items}
+
+        # 移除表单中已删除的键
+        for k in [k for k in list(existing_env.keys()) if k not in new_keys]:
+            del existing_env[k]
+
+        # 新增/更新键（值变化才覆写，未变化保留原节点）
+        for it in form_items:
+            key = it["key"]
+            value = it["value"]
+            if key in existing_env:
+                current = existing_env[key]
+                current_str = "" if current is None else str(current)
+                if current_str != value:
+                    existing_env[key] = value
+            else:
+                existing_env[key] = value
+
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            ry.dump(doc, f)
+
+        return True, f"任务 {new_name} 配置已更新"
+    except Exception as e:
+        log_error(f"更新任务配置失败: {e}")
+        return False, f"更新失败: {str(e)}"
+
+
+def perform_reload() -> tuple[bool, str]:
+    """重载配置：重新生成 .env 与 crontab，并加载 crontab（Linux）
+
+    抽取自 api_reload，便于编辑任务后自动调用。
+    Windows 环境跳过 crontab 更新。
+    """
+    try:
+        # 1. 重新生成环境变量
+        make_env_path = PROJECT_ROOT / "make_env.py"
+        if make_env_path.exists():
+            env_file = PROJECT_ROOT / ".env"
+            result = subprocess.run(
+                [sys.executable, str(make_env_path), str(CONFIG_FILE), str(env_file)],
+                capture_output=True,
+                text=True,
+                cwd=str(PROJECT_ROOT),
+            )
+            if result.returncode != 0:
+                return False, f"生成环境变量失败: {result.stderr}"
+
+        # Windows 环境跳过 crontab 相关操作（cron 是 Linux-only）
+        if os.name == "nt":
+            log_success("配置重载完成（Windows 环境跳过 crontab 更新）")
+            return True, "配置重载完成（Windows 环境跳过 crontab 更新）"
+
+        # 2. 重新生成 crontab 文件
+        cron_file = "/tmp/crontab"
+        make_cron_path = PROJECT_ROOT / "make_cron.py"
+        if not make_cron_path.exists():
+            return False, "未找到 make_cron.py"
+
+        with open(cron_file, "w", encoding="utf-8") as f:
+            f.write("# 自动生成的crontab - 由 WebUI 重载\n")
+            f.write("# 不要手动编辑此文件\n\n")
+            f.write('# 禁用邮件通知，避免输出被邮件系统捕获\n')
+            f.write('MAILTO=""\n\n')
+            f.write("# 全局环境变量\n")
+            f.write(f"APP_ENV={os.environ.get('APP_ENV', 'production')}\n")
+            f.write(f"LOG_LEVEL={os.environ.get('LOG_LEVEL', 'INFO')}\n")
+            f.write("PYTHONPATH=/app\n\n")
+            f.write("PATH=/usr/local/bin:/usr/bin:/bin\n\n")
+
+        result = subprocess.run(
+            [sys.executable, str(make_cron_path), str(CONFIG_FILE), cron_file],
+            capture_output=True,
+            text=True,
+            cwd=str(PROJECT_ROOT),
+        )
+        if result.returncode != 0:
+            return False, f"生成 crontab 失败: {result.stderr}"
+
+        # 3. 加载新的 crontab
+        result = subprocess.run(
+            ["crontab", cron_file],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return False, f"加载 crontab 失败: {result.stderr}"
+
+        log_success("配置重载完成")
+        return True, "配置重载完成，cron 调度已更新"
+    except Exception as e:
+        log_error(f"重载配置失败: {e}")
+        return False, f"重载失败: {str(e)}"
+
+
 def get_container_status() -> Dict[str, Any]:
     """获取容器状态"""
     try:
@@ -567,85 +863,113 @@ def api_log_content(filename: str):
 @app.route("/api/reload", methods=["POST"])
 def api_reload():
     """重载配置文件并刷新 cron 调度"""
-    try:
-        # 1. 重新生成环境变量
-        make_env_path = PROJECT_ROOT / "make_env.py"
-        if make_env_path.exists():
-            result = subprocess.run(
-                ["python3", str(make_env_path)],
-                capture_output=True,
-                text=True,
-                cwd=str(PROJECT_ROOT),
-            )
-            if result.returncode != 0:
-                return jsonify({
-                    "success": False,
-                    "message": f"生成环境变量失败: {result.stderr}"
-                }), 500
+    success, message = perform_reload()
+    if success:
+        return jsonify({"success": True, "message": message})
+    return jsonify({"success": False, "message": message}), 500
 
-        # 2. 重新生成 crontab 文件
-        cron_file = "/tmp/crontab"
-        make_cron_path = PROJECT_ROOT / "make_cron.py"
 
-        if not make_cron_path.exists():
-            return jsonify({
-                "success": False,
-                "message": "未找到 make_cron.py"
-            }), 500
+@app.route("/api/tasks/<task_name>/detail")
+def api_task_detail(task_name: str):
+    """获取任务详情（包含 env 和别名信息），用于编辑表单初始化"""
+    detail = get_task_detail(task_name)
+    if detail is None:
+        return jsonify({"success": False, "message": f"未找到任务: {task_name}"}), 404
+    return jsonify({"success": True, "task": detail})
 
-        # 清空并重建 crontab 文件头
-        with open(cron_file, "w", encoding="utf-8") as f:
-            f.write("# 自动生成的crontab - 由 WebUI 重载\n")
-            f.write("# 不要手动编辑此文件\n\n")
-            f.write('# 禁用邮件通知，避免输出被邮件系统捕获\n')
-            f.write('MAILTO=""\n\n')
 
-            # 写入全局环境变量
-            f.write("# 全局环境变量\n")
-            f.write(f"APP_ENV={os.environ.get('APP_ENV', 'production')}\n")
-            f.write(f"LOG_LEVEL={os.environ.get('LOG_LEVEL', 'INFO')}\n")
-            f.write("PYTHONPATH=/app\n\n")
-            f.write("PATH=/usr/local/bin:/usr/bin:/bin\n\n")
+@app.route("/api/validate/cron", methods=["POST"])
+def api_validate_cron():
+    """验证 cron 表达式并返回下次执行时间和调度说明（用于实时预览）"""
+    data = request.get_json(silent=True) or {}
+    expr = data.get("schedule", "") or ""
+    result = validate_cron_expression(expr)
+    return jsonify(result)
 
-        # 执行 make_cron.py 生成任务
-        result = subprocess.run(
-            ["python3", str(make_cron_path), "config.yml", cron_file],
-            capture_output=True,
-            text=True,
-            cwd=str(PROJECT_ROOT),
-        )
 
-        if result.returncode != 0:
-            return jsonify({
-                "success": False,
-                "message": f"生成 crontab 失败: {result.stderr}"
-            }), 500
+@app.route("/api/validate/script", methods=["POST"])
+def api_validate_script():
+    """检查脚本文件路径是否存在"""
+    data = request.get_json(silent=True) or {}
+    script = (data.get("script") or "").strip()
+    if not script:
+        return jsonify({"valid": False, "error": "脚本路径不能为空"})
+    exists = script_path_exists(script)
+    return jsonify({"valid": exists, "error": "" if exists else f"脚本文件不存在: {script}"})
 
-        # 3. 加载新的 crontab
-        result = subprocess.run(
-            ["crontab", cron_file],
-            capture_output=True,
-            text=True,
-        )
 
-        if result.returncode != 0:
-            return jsonify({
-                "success": False,
-                "message": f"加载 crontab 失败: {result.stderr}"
-            }), 500
+@app.route("/api/tasks/<task_name>/edit", methods=["POST"])
+def api_edit_task(task_name: str):
+    """编辑任务配置
 
-        log_success("配置重载完成")
-        return jsonify({
+    流程：服务端校验 → 字段级更新 config.yml（保留锚点/注释）→ 自动重载
+    """
+    data = request.get_json(silent=True) or {}
+
+    name = (data.get("name") or "").strip()
+    schedule = (data.get("schedule") or "").strip()
+    script = (data.get("script") or "").strip()
+    description = (data.get("description") or "").strip()
+    enabled = data.get("enabled")
+    env_list = data.get("env") or []
+
+    # 1. 非空校验
+    errors = []
+    if not name:
+        errors.append("任务名称不能为空")
+    if not schedule:
+        errors.append("调度规则不能为空")
+    if not script:
+        errors.append("脚本路径不能为空")
+
+    # 2. Cron 格式校验
+    cron_result = validate_cron_expression(schedule) if schedule else None
+    if cron_result and not cron_result.get("valid"):
+        errors.append(f"调度规则: {cron_result.get('error', '无效')}")
+
+    # 3. 脚本路径存在性校验
+    if script and not script_path_exists(script):
+        errors.append(f"脚本文件不存在: {script}")
+
+    # 4. env 键名规范校验（仅校验非别名的键：键名不能为空、不能重复）
+    seen_keys = set()
+    for item in env_list:
+        key = (item.get("key") or "").strip()
+        if not key:
+            continue
+        if key in seen_keys:
+            errors.append(f"环境变量键名重复: {key}")
+        seen_keys.add(key)
+
+    if errors:
+        return jsonify({"success": False, "message": "；".join(errors)}), 400
+
+    # 5. 更新 config.yml（保留锚点/注释）
+    updates = {
+        "name": name,
+        "schedule": schedule,
+        "script": script,
+        "description": description,
+        "env": env_list,
+    }
+    if enabled is not None:
+        updates["enabled"] = bool(enabled)
+
+    ok, msg = update_task_config(task_name, updates)
+    if not ok:
+        return jsonify({"success": False, "message": msg}), 500
+
+    # 6. 自动重载配置（生成 .env + crontab）
+    reload_ok, reload_msg = perform_reload()
+
+    return jsonify(
+        {
             "success": True,
-            "message": "配置重载完成，cron 调度已更新"
-        })
-
-    except Exception as e:
-        log_error(f"重载配置失败: {e}")
-        return jsonify({
-            "success": False,
-            "message": f"重载失败: {str(e)}"
-        }), 500
+            "message": msg,
+            "reloaded": reload_ok,
+            "reload_message": reload_msg,
+        }
+    )
 
 
 @app.route("/api/clean", methods=["POST"])

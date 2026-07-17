@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
     <div class="container">
@@ -33,11 +34,11 @@
         <main class="main">
             <div class="toolbar">
                 <button class="btn btn-secondary" id="btn-logs">
-                    <span class="btn-icon">🔎</span>
+                    <i data-lucide="search" class="btn-icon"></i>
                     查看日志
                 </button>
-                <button class="btn btn-refresh" id="btn-refresh" title="重载配置">
-                    <span class="btn-icon">♻</span>
+                <button class="btn btn-secondary"" id="btn-refresh" title="重载配置">
+                    <i data-lucide="refresh-cw" class="btn-icon"></i>
                     重载配置
                 </button>
             </div>
@@ -45,7 +46,7 @@
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title">
-                        <span class="title-icon">📋</span>
+                        <i data-lucide="list-todo" class="title-icon"></i>
                         定时任务
                     </h2>
                     <span class="badge" id="enabled-count">0 个启用</span>
@@ -60,7 +61,7 @@
                                     <th>调度规则</th>
                                     <th>描述</th>
                                     <th>下次执行</th>
-                                    <th>操作</th>
+                                    <th class="col-actions">操作</th>
                                 </tr>
                             </thead>
                             <tbody id="task-list">
@@ -88,16 +89,16 @@
         <div class="modal-content" role="dialog" aria-modal="true">
             <div class="modal-header">
                 <h3 class="modal-title">
-                    <span class="title-icon">📄</span>
+                    <i data-lucide="file-text" class="title-icon"></i>
                     日志文件
                 </h3>
                 <div class="modal-actions">
                     <button class="btn btn-sm btn-secondary" id="btn-clean" title="清理日志">
-                        <span class="btn-icon">🧹</span>
+                        <i data-lucide="broom" class="btn-icon"></i>
                         清理日志
                     </button>
                     <button class="btn btn-sm btn-secondary" id="btn-maximize" title="最大化">
-                        <span class="btn-icon">⛶</span>
+                        <i data-lucide="maximize-2" class="btn-icon"></i>
                     </button>
                     <button class="modal-close" id="modal-close" aria-label="关闭">&times;</button>
                 </div>
@@ -127,7 +128,7 @@
         <div class="modal-content modal-lg" role="dialog" aria-modal="true">
             <div class="modal-header">
                 <h3 class="modal-title">
-                    <span class="title-icon">🚀</span>
+                    <i data-lucide="rocket" class="title-icon"></i>
                     执行任务
                 </h3>
                 <button class="modal-close" id="run-modal-close" aria-label="关闭">&times;</button>
@@ -144,6 +145,97 @@
         </div>
     </div>
 
+    <div class="modal" id="edit-modal">
+        <div class="modal-overlay" aria-hidden="true"></div>
+        <div class="modal-content modal-lg" role="dialog" aria-modal="true">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i data-lucide="pencil" class="title-icon"></i>
+                    编辑任务
+                </h3>
+                <label class="switch" title="启用/禁用任务">
+                    <input type="checkbox" id="edit-enabled" checked />
+                    <span class="switch-track"></span>
+                    <span class="switch-label">启用</span>
+                </label>
+                <button class="modal-close" id="edit-modal-close" aria-label="关闭">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-form" class="edit-form" autocomplete="off">
+                    <div class="masonry-grid">
+                        <div class="form-field">
+                            <label class="form-field-label" for="edit-name">
+                                任务名称 <span class="required">*</span>
+                            </label>
+                            <input type="text" id="edit-name" class="form-control" placeholder="如：Bilibili" />
+                            <span class="form-field-hint" id="edit-name-hint"></span>
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="edit-description">
+                                任务描述
+                            </label>
+                            <input type="text" id="edit-description" class="form-control" placeholder="如：Bilibili签到" />
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="edit-script">
+                                脚本文件路径 <span class="required">*</span>
+                            </label>
+                            <input type="text" id="edit-script" class="form-control mono" placeholder="tasks/v2ex.py" />
+                            <span class="form-field-hint" id="edit-script-hint"></span>
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="edit-schedule">
+                                调度规则 (Cron) <span class="required">*</span>
+                            </label>
+                            <input type="text" id="edit-schedule" class="form-control mono" placeholder="0 2 * * *" />
+                            <span class="form-field-hint" id="edit-schedule-hint"></span>
+                            <div class="cron-preview" id="cron-preview" hidden>
+                                <div class="cron-preview-item">
+                                    <span class="cron-preview-label"><i data-lucide="clock" class="inline-icon"></i> 下次执行</span>
+                                    <span class="cron-preview-value mono" id="cron-next-run">-</span>
+                                </div>
+                                <div class="cron-preview-item">
+                                    <span class="cron-preview-label"><i data-lucide="info" class="inline-icon"></i> 规则说明</span>
+                                    <span class="cron-preview-value" id="cron-desc">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-field env-field">
+                        <div class="env-field-header">
+                            <label class="form-field-label">环境变量</label>
+                            <button type="button" class="btn btn-sm btn-primary" id="btn-add-env">
+                                <span class="btn-icon">+</span>
+                                添加变量
+                            </button>
+                        </div>
+                        <div class="env-tip"><i data-lucide="link" class="inline-icon"></i> 标记为「共享变量」的条目引用了 YAML 锚点（如 <code>*proxy</code>），其值在多处共享。编辑值会改为字面量，删除则解除引用。</div>
+                        <div class="env-list" id="env-list"></div>
+                        <template id="env-row-template">
+                            <div class="env-row">
+                                <div class="env-key-col">
+                                    <input type="text" class="env-key form-control mono" placeholder="KEY" />
+                                </div>
+                                <div class="env-value-col">
+                                    <textarea class="env-value form-control mono" rows="1" placeholder="value"></textarea>
+                                </div>
+                                <button type="button" class="btn-icon-only env-remove" title="删除">&times;</button>
+                            </div>
+                        </template>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="edit-cancel">取消</button>
+                <button class="btn btn-primary" id="edit-save">
+                    <i data-lucide="save" class="btn-icon"></i>
+                    保存并重载
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
 
     <div class="modal" id="confirm-modal">
@@ -151,13 +243,13 @@
         <div class="modal-content confirm-modal-content" role="dialog" aria-modal="true">
             <div class="modal-header">
                 <h3 class="modal-title">
-                    <span class="title-icon">⚠️</span>
+                    <i data-lucide="alert-triangle" class="title-icon"></i>
                     确认操作
                 </h3>
                 <button class="modal-close" id="confirm-modal-close" aria-label="关闭">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="confirm-icon">⚠️</div>
+                <div class="confirm-icon"><i data-lucide="alert-triangle"></i></div>
                 <div class="confirm-title" id="confirm-title">确定要执行此操作吗？</div>
                 <div class="confirm-message" id="confirm-message"></div>
             </div>
@@ -169,5 +261,8 @@
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+        lucide.createIcons();
+    </script>
 </body>
 </html>

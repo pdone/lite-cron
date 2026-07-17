@@ -2,3 +2,4 @@ config.yml
 compose.yml
 logs
 __pycache__
+.env
