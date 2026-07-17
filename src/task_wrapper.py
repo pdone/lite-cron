@@ -9,8 +9,9 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-# 导入日志模块
-sys.path.insert(0, "/app")
+# 导入日志模块 - 使用当前文件所在目录
+APP_DIR = str(Path(__file__).parent)
+sys.path.insert(0, APP_DIR)
 from logger import log_info, log_debug, log_error, log_warning
 
 
@@ -37,7 +38,9 @@ def setup_task_env(task_name: str) -> dict:
     return task_env
 
 
-def load_env_file(env_file="/app/.env"):
+def load_env_file(env_file=None):
+    if env_file is None:
+        env_file = os.path.join(APP_DIR, ".env")
     """
     从 .env 文件加载环境变量
 
@@ -88,7 +91,7 @@ def main():
     script_args = sys.argv[3:]
 
     # 从 .env 文件加载环境变量
-    load_env_file("/app/.env")
+    load_env_file()
 
     # 判断执行来源
     exec_mode = os.environ.get("LITECRON_EXEC_MODE", "cron")
@@ -115,8 +118,8 @@ def main():
 
     log_info(f"开始时间: {start_time_str}")
 
-    # 执行实际脚本
-    cmd = ["python3", script_path] + script_args
+    # 执行实际脚本 - 使用当前 Python 解释器
+    cmd = [sys.executable, script_path] + script_args
 
     # 使用 Popen 实时捕获输出，并同时输出到 stdout 和日志文件
     process = subprocess.Popen(
@@ -125,7 +128,7 @@ def main():
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,  # 行缓冲
-        cwd="/app",
+        cwd=APP_DIR,
     )
 
     # 实时读取并输出
@@ -161,7 +164,7 @@ def main():
 
     # 发送通知
     if exit_code != 0:
-        notify_path = Path("/app/notify.py")
+        notify_path = Path(APP_DIR) / "notify.py"
         if notify_path.exists():
             log_warning(f"任务 {task_name} 失败，发送通知...")
             try:
@@ -171,8 +174,8 @@ def main():
                 )
 
                 notify_cmd = [
-                    "python3",
-                    "/app/notify.py",
+                    sys.executable,
+                    str(notify_path),
                     f"{task_name} 执行失败",
                     "详情见日志",
                     "--log-content",

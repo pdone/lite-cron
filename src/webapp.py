@@ -27,9 +27,16 @@ from logger import log_info, log_success, log_error, log_warning
 
 # 项目路径配置 - 文件位于 /app/ 下
 PROJECT_ROOT = Path(__file__).parent.absolute()
-CONFIG_FILE = PROJECT_ROOT / "config.yml"
-LOGS_DIR = PROJECT_ROOT / "logs"
+
+# 动态检测任务脚本目录 - 优先使用 PROJECT_ROOT/tasks，不存在则使用父目录
 TASKS_DIR = PROJECT_ROOT / "tasks"
+if not TASKS_DIR.exists():
+    TASKS_DIR = PROJECT_ROOT.parent / "tasks"
+
+CONFIG_FILE = PROJECT_ROOT / "config.yml"
+if not CONFIG_FILE.exists():
+    CONFIG_FILE = PROJECT_ROOT.parent / "config.yml"
+LOGS_DIR = PROJECT_ROOT / "logs"
 TEMPLATE_DIR = PROJECT_ROOT / "template"
 STATIC_DIR = PROJECT_ROOT / "static"
 VERSION_FILE = PROJECT_ROOT / "VERSION"
@@ -409,6 +416,8 @@ def api_run_task(task_name: str):
 
             full_script_path = PROJECT_ROOT / script_path
             if not full_script_path.exists():
+                full_script_path = PROJECT_ROOT.parent / script_path
+            if not full_script_path.exists():
                 yield json.dumps(
                     {"status": "error", "message": f"脚本文件不存在: {script_path}"},
                     ensure_ascii=False,
@@ -425,12 +434,12 @@ def api_run_task(task_name: str):
                 for key, value in config["global_env"].items():
                     task_env[key] = str(value)
 
-            # 使用 Python 版本的包装器
+            # 使用当前 Python 解释器执行
             wrapper_py_path = PROJECT_ROOT / "task_wrapper.py"
             if wrapper_py_path.exists():
-                cmd = ["python3", str(wrapper_py_path), task_name, str(full_script_path)]
+                cmd = [sys.executable, str(wrapper_py_path), task_name, str(full_script_path)]
             else:
-                cmd = ["python3", str(full_script_path)]
+                cmd = [sys.executable, str(full_script_path)]
 
             yield json.dumps(
                 {"status": "running", "output": f"执行命令: {' '.join(cmd)}"},
@@ -685,5 +694,6 @@ if __name__ == "__main__":
         debug_mode = config["webui"].get("debug", False)
 
     log_info(f"正在启动 LiteCron Web 管理界面 (端口: {port}, 调试模式: {debug_mode})")
+    log_info(f"APP_DIR: {PROJECT_ROOT}")
 
     app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)

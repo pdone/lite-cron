@@ -1,9 +1,7 @@
 /**
  * LiteCron Web UI - 前端交互逻辑
- * 提供任务管理、日志查看、构建等功能
  */
 
-// 全局状态
 const state = {
     tasks: [],
     logs: [],
@@ -11,51 +9,40 @@ const state = {
     isRunning: false
 };
 
-// DOM 元素
 const elements = {
     taskList: document.getElementById('task-list'),
     taskCount: document.getElementById('task-count'),
     enabledCount: document.getElementById('enabled-count'),
-
-    // 按钮
     btnLogs: document.getElementById('btn-logs'),
     btnClean: document.getElementById('btn-clean'),
     btnRefresh: document.getElementById('btn-refresh'),
-    
-    // 模态框
+    btnMaximize: document.getElementById('btn-maximize'),
     logsModal: document.getElementById('logs-modal'),
     runModal: document.getElementById('run-modal'),
+    confirmModal: document.getElementById('confirm-modal'),
     modalClose: document.getElementById('modal-close'),
     runModalClose: document.getElementById('run-modal-close'),
-    
-    // 日志模态框
+    confirmModalClose: document.getElementById('confirm-modal-close'),
     fileList: document.getElementById('file-list'),
     logsViewer: document.getElementById('logs-viewer'),
     currentFilename: document.getElementById('current-filename'),
     btnDownload: document.getElementById('btn-download'),
-    
-    // 执行模态框
     runTaskName: document.getElementById('run-task-name'),
     runStatus: document.getElementById('run-status'),
     terminal: document.getElementById('terminal'),
-    
-    // Toast
-    toastContainer: document.getElementById('toast-container')
+    toastContainer: document.getElementById('toast-container'),
+    confirmTitle: document.getElementById('confirm-title'),
+    confirmMessage: document.getElementById('confirm-message'),
+    confirmOk: document.getElementById('confirm-ok'),
+    confirmCancel: document.getElementById('confirm-cancel')
 };
 
-/**
- * 初始化应用
- */
 function init() {
     bindEvents();
     loadData(false);
 }
 
-/**
- * 绑定事件
- */
 function bindEvents() {
-    // 工具栏按钮
     elements.btnRefresh.addEventListener('click', () => {
         elements.btnRefresh.classList.add('rotating');
         loadData(true);
@@ -66,13 +53,19 @@ function bindEvents() {
         loadLogs();
         openModal('logs');
     });
-    elements.btnClean.addEventListener('click', cleanLogs);
+    elements.btnClean.addEventListener('click', () => {
+        showConfirm({
+            title: '确认清理日志',
+            message: '确定要清理超过 7 天的日志文件吗？此操作无法撤销。',
+            onConfirm: cleanLogs
+        });
+    });
     
-    // 模态框关闭
+    elements.btnMaximize.addEventListener('click', toggleMaximize);
+    
     elements.modalClose.addEventListener('click', () => closeModal('logs'));
     elements.runModalClose.addEventListener('click', () => closeModal('run'));
     
-    // 点击遮罩关闭
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', (e) => {
             const modal = e.target.closest('.modal');
@@ -83,10 +76,11 @@ function bindEvents() {
         });
     });
     
-    // 下载按钮
     elements.btnDownload.addEventListener('click', downloadLog);
     
-    // ESC 键关闭模态框
+    elements.confirmModalClose.addEventListener('click', () => closeModal('confirm'));
+    elements.confirmCancel.addEventListener('click', () => closeModal('confirm'));
+    
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeAllModals();
@@ -94,18 +88,12 @@ function bindEvents() {
     });
 }
 
-/**
- * 加载所有数据
- * @param {boolean} reload - 是否重载配置（默认 false）
- */
 async function loadData(reload = false) {
     try {
         if (reload) {
-            // 先重载配置和 cron 调度
             try {
                 const reloadResponse = await fetch('/api/reload', { method: 'POST' });
                 const reloadData = await reloadResponse.json();
-
                 if (reloadData.success) {
                     showToast(reloadData.message, 'success');
                 } else {
@@ -116,8 +104,6 @@ async function loadData(reload = false) {
                 showToast('重载配置失败', 'error');
             }
         }
-
-        // 再刷新任务列表
         await loadTasks();
     } catch (error) {
         console.error('加载数据失败:', error);
@@ -125,9 +111,6 @@ async function loadData(reload = false) {
     }
 }
 
-/**
- * 加载任务列表
- */
 async function loadTasks() {
     try {
         elements.taskList.innerHTML = `
@@ -147,28 +130,23 @@ async function loadTasks() {
         
         const data = await response.json();
         
-        // 检查API是否返回错误
         if (data.error) {
             throw new Error(data.error);
         }
         
         state.tasks = data.tasks || [];
         
-        // 更新任务统计
         const enabledCount = state.tasks.filter(t => t.enabled).length;
         elements.taskCount.textContent = state.tasks.length || 0;
         elements.enabledCount.textContent = `${enabledCount} 个启用`;
         
-        // 如果任务列表为空且配置不存在，显示提示
         if (state.tasks.length === 0 && data.config_exists === false) {
             elements.taskList.innerHTML = `
                 <tr>
                     <td colspan="6" class="empty-state">
                         <div class="empty-icon">📋</div>
                         <div class="empty-text">未找到 config.yml 配置文件</div>
-                        <div style="margin-top: 12px; color: var(--text-muted); font-size: 0.875rem;">
-                            请创建 config.yml 文件并重新加载
-                        </div>
+                        <div class="empty-subtext">请创建 config.yml 文件并重新加载</div>
                     </td>
                 </tr>
             `;
@@ -184,8 +162,8 @@ async function loadTasks() {
                 <td colspan="6" class="empty-state">
                     <div class="empty-icon">⚠️</div>
                     <div class="empty-text">加载任务失败: ${error.message}</div>
-                    <div style="margin-top: 12px; color: var(--text-muted); font-size: 0.875rem;">
-                        <button onclick="loadTasks()" class="btn btn-secondary" style="margin-top: 8px;">
+                    <div class="empty-subtext">
+                        <button onclick="loadTasks()" class="btn btn-secondary" style="margin-top: 12px;">
                             <span class="btn-icon">🔄</span> 重试
                         </button>
                     </div>
@@ -195,24 +173,34 @@ async function loadTasks() {
     }
 }
 
-/**
- * 渲染任务列表
- */
 function renderTasks() {
+    const mobileTaskList = document.getElementById('mobile-task-list');
+    
     if (state.tasks.length === 0) {
         elements.taskList.innerHTML = `
             <tr>
                 <td colspan="6" class="empty-state">
                     <div class="empty-icon">📋</div>
                     <div class="empty-text">暂无配置的任务</div>
+                    <div class="empty-subtext">在 config.yml 中添加任务配置</div>
                 </td>
             </tr>
         `;
+        
+        if (mobileTaskList) {
+            mobileTaskList.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📋</div>
+                    <div class="empty-text">暂无配置的任务</div>
+                    <div class="empty-subtext">在 config.yml 中添加任务配置</div>
+                </div>
+            `;
+        }
         return;
     }
     
     elements.taskList.innerHTML = state.tasks.map(task => `
-        <tr data-task-name="${task.name}">
+        <tr data-task-name="${task.name}" class="task-row">
             <td>
                 <span class="task-status ${task.enabled ? 'enabled' : 'disabled'}">
                     <span class="status-dot"></span>
@@ -259,11 +247,55 @@ function renderTasks() {
             </td>
         </tr>
     `).join('');
+    
+    if (mobileTaskList) {
+        mobileTaskList.innerHTML = state.tasks.map(task => `
+            <div class="mobile-task-card" data-task-name="${task.name}">
+                <div class="mobile-task-header">
+                    <span class="mobile-task-name">${task.name}</span>
+                    <span class="mobile-task-status ${task.enabled ? 'enabled' : 'disabled'}">
+                        <span class="mobile-task-status-dot"></span>
+                        ${task.enabled ? '启用' : '禁用'}
+                    </span>
+                </div>
+                <div class="mobile-task-info">
+                    <div class="mobile-task-info-item">
+                        <span class="mobile-task-info-label">调度</span>
+                        <span class="mobile-task-info-value mono">${task.schedule}</span>
+                    </div>
+                    ${task.schedule_desc && task.schedule_desc !== task.schedule ? `
+                        <div class="mobile-task-info-item">
+                            <span class="mobile-task-info-label">说明</span>
+                            <span class="mobile-task-info-value">${task.schedule_desc}</span>
+                        </div>
+                    ` : ''}
+                    <div class="mobile-task-info-item">
+                        <span class="mobile-task-info-label">描述</span>
+                        <span class="mobile-task-info-value">${task.description || '-'}</span>
+                    </div>
+                    <div class="mobile-task-info-item">
+                        <span class="mobile-task-info-label">下次</span>
+                        <span class="mobile-task-info-value">${task.next_run || '-'}</span>
+                    </div>
+                </div>
+                <div class="mobile-task-actions">
+                    <button class="btn-action btn-run"
+                            onclick="runTask('${task.name}')"
+                            ${!task.enabled ? 'disabled' : ''}
+                            title="立即执行">
+                        ▶ 执行
+                    </button>
+                    <button class="btn-action btn-toggle ${task.enabled ? 'disable' : 'enable'}"
+                            onclick="toggleTask('${task.name}', ${!task.enabled})"
+                            title="${task.enabled ? '禁用' : '启用'}">
+                        ${task.enabled ? '⏸ 禁用' : '▶ 启用'}
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
 }
 
-/**
- * 执行任务
- */
 async function runTask(taskName) {
     if (state.isRunning) return;
     
@@ -309,9 +341,6 @@ async function runTask(taskName) {
     }
 }
 
-/**
- * 处理执行输出
- */
 function handleRunOutput(data) {
     if (data.status === 'started') {
         elements.terminal.innerHTML = '';
@@ -319,7 +348,6 @@ function handleRunOutput(data) {
         elements.runStatus.textContent = '执行中...';
     } else if (data.status === 'running') {
         appendTerminal(elements.terminal, data.output);
-        // 自动滚动到底部
         elements.terminal.scrollTop = elements.terminal.scrollHeight;
     } else if (data.status === 'completed') {
         const type = data.success ? 'success' : 'error';
@@ -338,9 +366,6 @@ function handleRunOutput(data) {
     }
 }
 
-/**
- * 添加终端输出行
- */
 function appendTerminal(terminal, text, type = '') {
     const line = document.createElement('div');
     line.className = `terminal-line ${type}`;
@@ -348,9 +373,6 @@ function appendTerminal(terminal, text, type = '') {
     terminal.appendChild(line);
 }
 
-/**
- * 切换任务状态
- */
 async function toggleTask(taskName, enable) {
     try {
         const response = await fetch(`/api/tasks/${encodeURIComponent(taskName)}/toggle`, {
@@ -363,7 +385,7 @@ async function toggleTask(taskName, enable) {
         
         if (data.success) {
             showToast(data.message, 'success');
-            loadTasks(); // 刷新任务列表
+            loadTasks();
         } else {
             showToast(data.message || '操作失败', 'error');
         }
@@ -374,9 +396,6 @@ async function toggleTask(taskName, enable) {
     }
 }
 
-/**
- * 加载日志列表
- */
 async function loadLogs() {
     elements.fileList.innerHTML = '<li class="file-item loading">加载中...</li>';
     elements.logsViewer.innerHTML = '<code>点击左侧文件查看内容</code>';
@@ -388,8 +407,6 @@ async function loadLogs() {
         const data = await response.json();
         
         state.logs = data.logs || [];
-
-        // 按日期降序排序（文件名格式: YYYYMMDD.log）
         state.logs.sort((a, b) => b.modified.localeCompare(a.modified));
 
         if (state.logs.length === 0) {
@@ -404,7 +421,6 @@ async function loadLogs() {
             </li>
         `).join('');
         
-        // 自动查看最新的日志
         if (state.logs.length > 0) {
             viewLog(state.logs[0].name, 0);
         }
@@ -415,11 +431,7 @@ async function loadLogs() {
     }
 }
 
-/**
- * 查看日志内容
- */
 async function viewLog(filename, index) {
-    // 更新选中状态
     document.querySelectorAll('.file-item').forEach((item, i) => {
         item.classList.toggle('active', i === index);
     });
@@ -436,11 +448,8 @@ async function viewLog(filename, index) {
         if (data.error) {
             elements.logsViewer.innerHTML = `<code class="error">${data.error}</code>`;
         } else {
-            // 转义 HTML 并高亮
             const escaped = escapeHtml(data.content);
             elements.logsViewer.innerHTML = `<code>${escaped}</code>`;
-            
-            // 滚动到底部
             elements.logsViewer.scrollTop = elements.logsViewer.scrollHeight;
         }
         
@@ -450,9 +459,6 @@ async function viewLog(filename, index) {
     }
 }
 
-/**
- * 下载日志
- */
 function downloadLog() {
     const filename = elements.btnDownload.dataset.filename;
     if (!filename) return;
@@ -474,14 +480,7 @@ function downloadLog() {
         });
 }
 
-/**
- * 清理日志
- */
 async function cleanLogs() {
-    if (!confirm('确定要清理超过 7 天的日志文件吗？')) {
-        return;
-    }
-    
     try {
         elements.btnClean.disabled = true;
         elements.btnClean.innerHTML = '<span class="btn-icon">⏳</span> 清理中...';
@@ -491,6 +490,8 @@ async function cleanLogs() {
         
         if (data.success) {
             showToast('日志清理完成', 'success');
+            closeModal('confirm');
+            loadLogs();
         } else {
             showToast(data.message || '清理失败', 'error');
         }
@@ -504,9 +505,6 @@ async function cleanLogs() {
     }
 }
 
-/**
- * 打开模态框
- */
 function openModal(type) {
     const modal = document.getElementById(`${type}-modal`);
     if (modal) {
@@ -515,9 +513,6 @@ function openModal(type) {
     }
 }
 
-/**
- * 关闭模态框
- */
 function closeModal(type) {
     const modal = document.getElementById(`${type}-modal`);
     if (modal) {
@@ -526,9 +521,6 @@ function closeModal(type) {
     }
 }
 
-/**
- * 关闭所有模态框
- */
 function closeAllModals() {
     document.querySelectorAll('.modal').forEach(modal => {
         modal.classList.remove('active');
@@ -536,9 +528,41 @@ function closeAllModals() {
     document.body.style.overflow = '';
 }
 
-/**
- * 显示 Toast 通知
- */
+function toggleMaximize() {
+    const modalContent = elements.logsModal.querySelector('.modal-content');
+    const isMaximized = modalContent.classList.toggle('maximized');
+    
+    const btnIcon = elements.btnMaximize.querySelector('.btn-icon');
+    if (isMaximized) {
+        btnIcon.textContent = '⛶';
+        elements.btnMaximize.title = '还原';
+    } else {
+        btnIcon.textContent = '⛶';
+        elements.btnMaximize.title = '最大化';
+    }
+}
+
+let confirmCallback = null;
+
+function showConfirm(options) {
+    const { title, message, onConfirm } = options;
+    
+    elements.confirmTitle.textContent = title || '确认操作';
+    elements.confirmMessage.textContent = message || '';
+    confirmCallback = onConfirm;
+    
+    openModal('confirm');
+}
+
+elements.confirmOk.addEventListener('click', () => {
+    if (confirmCallback) {
+        confirmCallback();
+        confirmCallback = null;
+    } else {
+        closeModal('confirm');
+    }
+});
+
 function showToast(message, type = 'info', duration = 3000) {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -553,28 +577,30 @@ function showToast(message, type = 'info', duration = 3000) {
     toast.innerHTML = `
         <span class="toast-icon">${icons[type]}</span>
         <span class="toast-message">${message}</span>
-        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+        <button class="toast-close" onclick="removeToast(this.parentElement)">&times;</button>
     `;
     
     elements.toastContainer.appendChild(toast);
     
-    // 自动关闭
     setTimeout(() => {
-        if (toast.parentElement) {
-            toast.style.animation = 'toastOut 0.3s ease forwards';
-            setTimeout(() => toast.remove(), 300);
-        }
+        removeToast(toast);
     }, duration);
 }
 
-/**
- * 转义 HTML 特殊字符
- */
+function removeToast(toast) {
+    if (!toast || !toast.parentElement) return;
+    toast.style.animation = 'toastOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards';
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 300);
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-// 启动应用
 document.addEventListener('DOMContentLoaded', init);

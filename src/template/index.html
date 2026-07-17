@@ -3,17 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LiteCron 管理面板</title>
+    <title>LiteCron</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
-        <!-- 头部 -->
         <header class="header">
             <div class="header-content">
                 <div class="logo">
-                    <h1><a href="https://github.com/pdone/lite-cron" target="_blank" rel="noopener noreferrer">LiteCron</a></h1>
+                    <img src="{{ url_for('static', filename='favicon.svg') }}" alt="LiteCron" class="logo-icon">
+                    <div class="logo-text">
+                        <h1><a href="https://github.com/pdone/lite-cron" target="_blank" rel="noopener noreferrer">LiteCron</a></h1>
+                        <span class="logo-version">v{{ app_version }}</span>
+                    </div>
                 </div>
                 <div class="header-stats">
                     <div class="stat-item">
@@ -24,24 +30,18 @@
             </div>
         </header>
 
-        <!-- 主内容区 -->
         <main class="main">
-            <!-- 工具栏 -->
             <div class="toolbar">
                 <button class="btn btn-secondary" id="btn-logs">
-                    <span class="btn-icon">📄</span>
+                    <span class="btn-icon">🔎</span>
                     查看日志
                 </button>
-                <button class="btn btn-secondary" id="btn-clean">
-                    <span class="btn-icon">🧹</span>
-                    清理日志
-                </button>
-                <button class="btn btn-refresh" id="btn-refresh" title="刷新">
-                    <span class="btn-icon">♻️</span>
+                <button class="btn btn-refresh" id="btn-refresh" title="重载配置">
+                    <span class="btn-icon">♻</span>
+                    重载配置
                 </button>
             </div>
 
-            <!-- 任务列表 -->
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title">
@@ -73,26 +73,34 @@
                             </tbody>
                         </table>
                     </div>
+                    <div class="mobile-task-list" id="mobile-task-list"></div>
                 </div>
             </div>
         </main>
 
-        <!-- 页脚 -->
         <footer class="footer">
-            <p>LiteCron WebUI · 当前版本 v{{ app_version }} · <a href="https://github.com/pdone/lite-cron/releases" target="_blank" rel="noopener noreferrer">查看最新版本</a></p>
+            <p>LiteCron WebUI · <a href="https://github.com/pdone/lite-cron" target="_blank" rel="noopener noreferrer">项目主页</a></p>
         </footer>
     </div>
 
-    <!-- 日志查看模态框 -->
     <div class="modal" id="logs-modal">
-        <div class="modal-overlay"></div>
-        <div class="modal-content">
+        <div class="modal-overlay" aria-hidden="true"></div>
+        <div class="modal-content" role="dialog" aria-modal="true">
             <div class="modal-header">
                 <h3 class="modal-title">
                     <span class="title-icon">📄</span>
                     日志文件
                 </h3>
-                <button class="modal-close" id="modal-close">&times;</button>
+                <div class="modal-actions">
+                    <button class="btn btn-sm btn-secondary" id="btn-clean" title="清理日志">
+                        <span class="btn-icon">🧹</span>
+                        清理日志
+                    </button>
+                    <button class="btn btn-sm btn-secondary" id="btn-maximize" title="最大化">
+                        <span class="btn-icon">⛶</span>
+                    </button>
+                    <button class="modal-close" id="modal-close" aria-label="关闭">&times;</button>
+                </div>
             </div>
             <div class="modal-body">
                 <div class="logs-layout">
@@ -114,16 +122,15 @@
         </div>
     </div>
 
-    <!-- 任务执行模态框 -->
     <div class="modal" id="run-modal">
-        <div class="modal-overlay"></div>
-        <div class="modal-content modal-lg">
+        <div class="modal-overlay" aria-hidden="true"></div>
+        <div class="modal-content modal-lg" role="dialog" aria-modal="true">
             <div class="modal-header">
                 <h3 class="modal-title">
                     <span class="title-icon">🚀</span>
                     执行任务
                 </h3>
-                <button class="modal-close" id="run-modal-close">&times;</button>
+                <button class="modal-close" id="run-modal-close" aria-label="关闭">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="run-info">
@@ -137,8 +144,29 @@
         </div>
     </div>
 
-    <!-- Toast 通知 -->
-    <div class="toast-container" id="toast-container"></div>
+    <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
+
+    <div class="modal" id="confirm-modal">
+        <div class="modal-overlay" aria-hidden="true"></div>
+        <div class="modal-content confirm-modal-content" role="dialog" aria-modal="true">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <span class="title-icon">⚠️</span>
+                    确认操作
+                </h3>
+                <button class="modal-close" id="confirm-modal-close" aria-label="关闭">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="confirm-icon">⚠️</div>
+                <div class="confirm-title" id="confirm-title">确定要执行此操作吗？</div>
+                <div class="confirm-message" id="confirm-message"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="confirm-cancel">取消</button>
+                <button class="btn btn-danger" id="confirm-ok">确认</button>
+            </div>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

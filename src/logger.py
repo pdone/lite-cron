@@ -16,13 +16,18 @@ from datetime import datetime
 from pathlib import Path
 
 # ============ 配置 ============
-LOG_DIR = os.environ.get('LOG_DIR', '/app/logs')
 LOG_DATE = datetime.now().strftime('%Y%m%d')
-LOG_FILE = os.path.join(LOG_DIR, f"{LOG_DATE}.log")
 
-# 确保日志目录存在
+# 日志目录 - 统一使用当前文件(parent)同级目录的 logs/
+# 容器内: /app/webapp.py -> /app/logs/
+# 宿主机: src/webapp.py -> src/logs/
+LOG_DIR = str(Path(__file__).parent / 'logs')
 Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 
+LOG_FILE = os.path.join(LOG_DIR, f"{LOG_DATE}.log")
+
+
+_log_fallback_done = False
 
 # ============ 核心日志函数 ============
 
@@ -34,6 +39,8 @@ def log(message: str, level: str = "INF") -> None:
         message: 日志消息
         level: 日志级别 (INFO/SUCCESS/ERROR/WARNING/DEBUG)
     """
+    global LOG_FILE, LOG_DIR, _log_fallback_done
+    
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
     formatted = f"{timestamp} [{level}] {message}"
     
@@ -45,8 +52,21 @@ def log(message: str, level: str = "INF") -> None:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(formatted + '\n')
     except Exception as e:
-        # 如果写入文件失败，至少打印到控制台
-        print(f"[ERR] 无法写入日志文件: {e}")
+        if not _log_fallback_done:
+            fallback_dir = os.path.join(os.getcwd(), 'logs')
+            try:
+                Path(fallback_dir).mkdir(parents=True, exist_ok=True)
+                LOG_DIR = fallback_dir
+                LOG_FILE = os.path.join(LOG_DIR, f"{LOG_DATE}.log")
+                _log_fallback_done = True
+                warn_msg = f"{timestamp} [WAR] 日志目录不可用，降级到 {LOG_DIR}"
+                print(warn_msg, flush=True)
+                with open(LOG_FILE, 'a', encoding='utf-8') as f:
+                    f.write(warn_msg + '\n')
+            except Exception as fallback_e:
+                print(f"{timestamp} [ERR] 日志降级也失败: {fallback_e}", flush=True)
+        else:
+            print(f"[ERR] 无法写入日志文件: {e}")
 
 
 def log_info(message: str) -> None:
