@@ -67,7 +67,7 @@ def generate_env(config_path='config.yml', env_file='/app/.env'):
 
                 f.write("\n")
 
-    log_success(f"环境变量文件已生成: {env_file}")
+    log_success(f"[WebUI] 环境变量文件已生成: {env_file}")
     return True
 
 

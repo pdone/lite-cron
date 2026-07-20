@@ -5,6 +5,7 @@ LiteCron Web 管理界面
 提供任务管理、日志查看等功能
 """
 
+import locale
 import os
 import sys
 import subprocess
@@ -151,6 +152,7 @@ def toggle_task_enabled(task_name: str) -> Optional[bool]:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             ry.dump(doc, f)
 
+        log_success(f"[WebUI] 任务 {task_name} 已{'启用' if new_status else '禁用'}")
         return new_status
     except Exception as e:
         log_error(f"切换任务状态失败: {e}")
@@ -380,6 +382,7 @@ def update_task_config(
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             ry.dump(doc, f)
 
+        # log_success(f"[WebUI] 任务 {new_name} 配置已更新")
         return True, f"任务 {new_name} 配置已更新"
     except Exception as e:
         log_error(f"更新任务配置失败: {e}")
@@ -408,7 +411,7 @@ def perform_reload() -> tuple[bool, str]:
 
         # Windows 环境跳过 crontab 相关操作（cron 是 Linux-only）
         if os.name == "nt":
-            log_success("配置重载完成（Windows 环境跳过 crontab 更新）")
+            log_success("[WebUI] 配置重载完成（Windows 环境跳过 crontab 更新）")
             return True, "配置重载完成（Windows 环境跳过 crontab 更新）"
 
         # 2. 重新生成 crontab 文件
@@ -446,7 +449,7 @@ def perform_reload() -> tuple[bool, str]:
         if result.returncode != 0:
             return False, f"加载 crontab 失败: {result.stderr}"
 
-        log_success("配置重载完成")
+        log_success("[WebUI] 配置重载完成")
         return True, "配置重载完成，cron 调度已更新"
     except Exception as e:
         log_error(f"重载配置失败: {e}")
@@ -671,6 +674,7 @@ def api_run_task(task_name: str):
     """执行任务"""
 
     def generate():
+        log_info(f"[WebUI] 开始执行任务: {task_name}")
         yield json.dumps(
             {"status": "started", "message": f"开始执行任务: {task_name}"},
             ensure_ascii=False,
@@ -679,6 +683,7 @@ def api_run_task(task_name: str):
         try:
             config = load_config()
             if not config or "tasks" not in config:
+                log_error(f"[WebUI] 执行任务 {task_name} 失败: 配置未找到")
                 yield json.dumps(
                     {"status": "error", "message": "配置未找到"}, ensure_ascii=False
                 ) + "\n"
@@ -691,6 +696,7 @@ def api_run_task(task_name: str):
                     break
 
             if not task:
+                log_error(f"[WebUI] 执行任务 {task_name} 失败: 任务未找到")
                 yield json.dumps(
                     {"status": "error", "message": f"未找到任务: {task_name}"},
                     ensure_ascii=False,
@@ -698,6 +704,7 @@ def api_run_task(task_name: str):
                 return
 
             if not task.get("enabled", True):
+                log_warning(f"[WebUI] 执行任务 {task_name} 失败: 任务已禁用")
                 yield json.dumps(
                     {"status": "error", "message": "任务已禁用"}, ensure_ascii=False
                 ) + "\n"
@@ -705,6 +712,7 @@ def api_run_task(task_name: str):
 
             script_path = task.get("script", "")
             if not script_path:
+                log_error(f"[WebUI] 执行任务 {task_name} 失败: 任务未配置脚本")
                 yield json.dumps(
                     {"status": "error", "message": "任务未配置脚本"}, ensure_ascii=False
                 ) + "\n"
@@ -714,6 +722,7 @@ def api_run_task(task_name: str):
             if not full_script_path.exists():
                 full_script_path = PROJECT_ROOT.parent / script_path
             if not full_script_path.exists():
+                log_error(f"[WebUI] 执行任务 {task_name} 失败: 脚本文件不存在 {script_path}")
                 yield json.dumps(
                     {"status": "error", "message": f"脚本文件不存在: {script_path}"},
                     ensure_ascii=False,
@@ -742,12 +751,18 @@ def api_run_task(task_name: str):
                 ensure_ascii=False,
             ) + "\n"
 
+            # Windows 本地环境默认使用 GBK，容器内使用 UTF-8
+            stdout_encoding = "utf-8"
+            if os.name == "nt":
+                stdout_encoding = locale.getencoding() or "gbk"
+
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                encoding="utf-8",
+                encoding=stdout_encoding,
+                errors="replace",
                 cwd=str(PROJECT_ROOT),
                 env=task_env,
             )
@@ -762,6 +777,11 @@ def api_run_task(task_name: str):
 
             process.wait()
             success = process.returncode == 0
+
+            if success:
+                log_success(f"[WebUI] 任务 {task_name} 执行成功")
+            else:
+                log_error(f"[WebUI] 任务 {task_name} 执行失败 (返回码: {process.returncode})")
 
             yield json.dumps(
                 {
@@ -778,6 +798,7 @@ def api_run_task(task_name: str):
             ) + "\n"
 
         except Exception as e:
+            log_error(f"[WebUI] 执行任务 {task_name} 出错: {str(e)}")
             yield json.dumps(
                 {"status": "error", "success": False, "message": f"执行出错: {str(e)}"},
                 ensure_ascii=False,
@@ -804,6 +825,57 @@ def api_toggle_task(task_name: str):
             "message": f"任务已{'启用' if new_status else '禁用'}",
         }
     )
+
+
+def set_all_tasks_enabled(enabled: bool) -> tuple[bool, int, str]:
+    """批量设置所有任务的启用状态
+
+    Args:
+        enabled: True 表示全部启用，False 表示全部禁用
+
+    Returns:
+        (success, count, message)
+    """
+    try:
+        from ruamel.yaml import YAML
+
+        ry = YAML()
+        ry.preserve_quotes = True
+
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            doc = ry.load(f)
+
+        if not doc or "tasks" not in doc:
+            return False, 0, "配置未找到或无 tasks 段"
+
+        count = 0
+        for task in doc["tasks"]:
+            current = bool(task.get("enabled", True))
+            if current != enabled:
+                task["enabled"] = enabled
+                count += 1
+
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            ry.dump(doc, f)
+
+        action = "启用" if enabled else "禁用"
+        log_success(f"[WebUI] 批量操作：已{action} {count} 个任务")
+        return True, count, f"已{action} {count} 个任务"
+    except Exception as e:
+        log_error(f"批量{enabled and '启用' or '禁用'}任务失败: {e}")
+        return False, 0, f"操作失败: {str(e)}"
+
+
+@app.route("/api/tasks/batch/toggle", methods=["POST"])
+def api_batch_toggle_tasks():
+    """批量启用/禁用所有任务"""
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled", True))
+
+    success, count, message = set_all_tasks_enabled(enabled)
+    if success:
+        return jsonify({"success": True, "count": count, "message": message})
+    return jsonify({"success": False, "count": 0, "message": message}), 500
 
 
 @app.route("/api/logs")
@@ -957,10 +1029,15 @@ def api_edit_task(task_name: str):
 
     ok, msg = update_task_config(task_name, updates)
     if not ok:
+        log_error(f"[WebUI] 编辑任务 {task_name} 失败: {msg}")
         return jsonify({"success": False, "message": msg}), 500
 
     # 6. 自动重载配置（生成 .env + crontab）
     reload_ok, reload_msg = perform_reload()
+    if reload_ok:
+        log_success(f"[WebUI] 任务 {name} 编辑完成并重载成功")
+    else:
+        log_warning(f"[WebUI] 任务 {name} 编辑完成，但重载失败: {reload_msg}")
 
     return jsonify(
         {
@@ -994,6 +1071,11 @@ def api_clean():
                 except Exception:
                     pass
 
+        if cleaned_count > 0:
+            log_success(f"[WebUI] 已清理 {cleaned_count} 个超过7天的日志文件")
+        else:
+            log_info("[WebUI] 无需清理，未找到超过7天的日志文件")
+
         return jsonify(
             {
                 "success": True,
@@ -1002,6 +1084,7 @@ def api_clean():
             }
         )
     except Exception as e:
+        log_error(f"[WebUI] 清理日志失败: {str(e)}")
         return jsonify({"success": False, "message": f"清理失败: {str(e)}"}), 500
 
 

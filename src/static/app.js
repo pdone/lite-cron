@@ -16,6 +16,8 @@ const elements = {
     btnLogs: document.getElementById('btn-logs'),
     btnClean: document.getElementById('btn-clean'),
     btnRefresh: document.getElementById('btn-refresh'),
+    btnEnableAll: document.getElementById('btn-enable-all'),
+    btnDisableAll: document.getElementById('btn-disable-all'),
     btnMaximize: document.getElementById('btn-maximize'),
     logsModal: document.getElementById('logs-modal'),
     runModal: document.getElementById('run-modal'),
@@ -80,8 +82,25 @@ function bindEvents() {
     });
     
     elements.btnLogs.addEventListener('click', () => {
-        loadLogs();
         openModal('logs');
+        loadLogs();
+        lucide.createIcons({ root: elements.logsModal });
+    });
+    
+    elements.btnEnableAll.addEventListener('click', () => {
+        showConfirm({
+            title: '确认全部启用',
+            message: '确定要启用所有定时任务吗？',
+            onConfirm: () => batchToggleTasks(true)
+        });
+    });
+    
+    elements.btnDisableAll.addEventListener('click', () => {
+        showConfirm({
+            title: '确认全部禁用',
+            message: '确定要禁用所有定时任务吗？此操作将暂停所有定时任务的执行。',
+            onConfirm: () => batchToggleTasks(false)
+        });
     });
     elements.btnClean.addEventListener('click', () => {
         showConfirm({
@@ -461,6 +480,40 @@ async function toggleTask(taskName, enable) {
     }
 }
 
+async function batchToggleTasks(enabled) {
+    try {
+        const btn = enabled ? elements.btnEnableAll : elements.btnDisableAll;
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" class="btn-icon"></i> 处理中...';
+        
+        const response = await fetch('/api/tasks/batch/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            loadTasks();
+        } else {
+            showToast(data.message || '操作失败', 'error');
+        }
+        
+    } catch (error) {
+        console.error('批量操作失败:', error);
+        showToast('操作失败', 'error');
+    } finally {
+        const btn = enabled ? elements.btnEnableAll : elements.btnDisableAll;
+        btn.disabled = false;
+        btn.innerHTML = enabled 
+            ? '<i data-lucide="play" class="btn-icon"></i> 全部启用'
+            : '<i data-lucide="pause" class="btn-icon"></i> 全部禁用';
+        lucide.createIcons({ root: btn });
+    }
+}
+
 async function loadLogs() {
     elements.fileList.innerHTML = '<li class="file-item loading">加载中...</li>';
     elements.logsViewer.innerHTML = '<code>点击左侧文件查看内容</code>';
@@ -566,7 +619,7 @@ async function cleanLogs() {
         showToast('清理请求失败', 'error');
     } finally {
         elements.btnClean.disabled = false;
-        elements.btnClean.innerHTML = '<i data-lucide="broom" class="btn-icon"></i> 清理日志';
+        elements.btnClean.innerHTML = '<i data-lucide="trash-2" class="btn-icon"></i> 清理日志';
     }
 }
 
@@ -621,11 +674,10 @@ function showConfirm(options) {
 }
 
 elements.confirmOk.addEventListener('click', () => {
+    closeModal('confirm');
     if (confirmCallback) {
         confirmCallback();
         confirmCallback = null;
-    } else {
-        closeModal('confirm');
     }
 });
 

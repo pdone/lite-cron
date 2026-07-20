@@ -181,7 +181,7 @@ svg {
 .confirm-icon {
     width: 72px;
     height: 72px;
-    margin-bottom: var(--spacing-md);
+    margin: 0 auto var(--spacing-md);
     animation: confirmPulse 1.5s ease-in-out infinite;
 }
 
@@ -492,6 +492,12 @@ body::before {
     background: var(--bg-active);
     border-color: var(--accent-primary);
     color: var(--accent-primary-light);
+}
+
+#btn-clean:hover {
+    background: var(--accent-danger);
+    border-color: var(--accent-danger);
+    color: var(--text-inverse);
 }
 
 .btn-refresh {
