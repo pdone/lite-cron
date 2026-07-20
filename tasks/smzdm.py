@@ -20,15 +20,12 @@ import re
 import hashlib
 import time
 import requests
-from datetime import datetime
 
 
 # 配置常量
 BASE_URL = "https://user-api.smzdm.com"
 CHECKIN_URL = f"{BASE_URL}/checkin"
 TOKEN_URL = f"{BASE_URL}/robot/token"
-ACTIVE_URL = "https://zhiyou.smzdm.com/user/lottery/jsonp_draw"
-REWARD_URL = "https://zhiyou.smzdm.com/user/lottery/jsonp_get_active_info"
 USER_URL = "https://zhiyou.smzdm.com/user/"
 
 HEADERS = {
@@ -78,7 +75,11 @@ def robot_token(cookie: str) -> str:
 
 
 def sign(cookie: str, token: str) -> tuple:
-    """执行签到"""
+    """执行签到
+
+    返回 (error_code, error_msg, data)
+    - error_code: 0=成功, 其他=失败/已签到
+    """
     time_stamp = round(time.time() * 1000)
     headers = HEADERS.copy()
     headers["Cookie"] = cookie
@@ -103,9 +104,13 @@ def sign(cookie: str, token: str) -> tuple:
         resp = requests.post(url=CHECKIN_URL, headers=headers, data=data, timeout=30)
         resp.raise_for_status()
         result = resp.json()
-        return result.get("error_msg", "未知响应"), data
+        return (
+            result.get("error_code", -1),
+            result.get("error_msg", "未知响应"),
+            data,
+        )
     except Exception as e:
-        return f"签到请求失败: {e}", None
+        return -1, f"签到请求失败: {e}", None
 
 
 def get_all_reward(cookie: str, data: dict) -> list:
@@ -119,24 +124,25 @@ def get_all_reward(cookie: str, data: dict) -> list:
         )
         resp.raise_for_status()
         result = resp.json()
-
-        msgs = []
-        normal_reward = result.get("data", {}).get("normal_reward")
-        if normal_reward:
-            try:
-                msgs = [
-                    {
-                        "name": "签到奖励",
-                        "value": normal_reward["reward_add"]["content"],
-                    },
-                    {"name": "连续签到", "value": normal_reward["sub_title"]},
-                ]
-            except Exception as e:
-                log_warning(f"解析奖励信息失败: {e}")
-        return msgs
     except Exception as e:
         log_warning(f"获取奖励信息失败: {e}")
         return []
+
+    normal_reward = (result.get("data") or {}).get("normal_reward") or {}
+    if not normal_reward:
+        log_debug("无 normal_reward 字段，跳过奖励解析")
+        return []
+
+    # reward_add 仅在首次签到时存在；已签到时只有 sub_title
+    reward_add = normal_reward.get("reward_add") or {}
+    msgs = []
+    if reward_add.get("content"):
+        msgs.append({"name": "签到奖励", "value": reward_add["content"]})
+    elif reward_add:
+        log_debug(f"reward_add 结构异常: {reward_add}")
+    if normal_reward.get("sub_title"):
+        msgs.append({"name": "连续签到", "value": normal_reward["sub_title"]})
+    return msgs
 
 
 def get_user_info(cookie: str) -> dict:
@@ -189,9 +195,6 @@ def get_user_info(cookie: str) -> dict:
 
 def main() -> int:
     """主函数"""
-    # start_time = datetime.now()
-    # start_time_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
-
     log_info("什么值得买签到任务开始")
 
     cookie = get_cookie()
@@ -202,14 +205,13 @@ def main() -> int:
     # 获取用户信息
     log_info("获取用户信息...")
     user_info = get_user_info(cookie)
-    user_info_msg = (
-        f"用户信息:\n"
+    log_info(
+        "用户信息:\n"
         f"  昵称: {user_info['name']}\n"
         f"  等级: {user_info['level']}\n"
         f"  金币: {user_info['gold']}\n"
         f"  碎银: {user_info['silver']}"
     )
-    log_info(user_info_msg)
 
     # 获取 token
     log_info("获取签到 token...")
@@ -220,22 +222,16 @@ def main() -> int:
 
     # 执行签到
     log_info("执行签到...")
-    error_msg, data = sign(cookie, token)
-    log_info(f"{error_msg}")
+    error_code, error_msg, data = sign(cookie, token)
+    log_info(error_msg)
 
-    # 获取奖励信息
-    if data:
+    # error_code == 0 表示签到成功；其他情况（已签到、重复签到等）跳过奖励查询
+    if error_code == 0 and data:
         reward_msgs = get_all_reward(cookie, data)
         for msg in reward_msgs:
             log_info(f"{msg['name']}: {msg['value']}")
 
-    # 记录结束时间
-    # end_time = datetime.now()
-    # end_time_str = end_time.strftime('%Y-%m-%d %H:%M:%S')
-    # duration = (end_time - start_time).total_seconds()
-
     log_success("任务完成")
-
     return 0
 
 

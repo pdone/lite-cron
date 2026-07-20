@@ -68,7 +68,9 @@ tasks:
     description: "哔哩哔哩签到"
     enabled: true
     env:
-      BILIBILI_COOKIE: "SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
+      BILIBILI_COOKIE: "SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx; buvid3=xxx; buvid4=xxx; b_nutss=xxx"
+      # ↑ 建议从浏览器导出完整 Cookie（包含 buvid3/buvid4/b_nutss 等设备指纹字段），
+      #   分享接口风控必需；只有 SESSDATA+bili_jct 会导致分享任务返回「账号异常,操作失败」
       # BILIBILI_COIN_NUM: "5"                    # 每日投币数量，默认5
       # BILIBILI_SKIP_COIN: "false"               # 是否跳过投币任务: true/false，默认false（节省硬币）
       # BILIBILI_SKIP_SHARE: "false"              # 是否跳过分享任务: true/false，默认false
@@ -85,7 +87,7 @@ tasks:
     enabled: true
     env:
       V2EX_COOKIE: "your_v2ex_cookie_here"
-      # V2EX_PROXY: *proxy  # 可选，引用顶部 proxy 锚点
+      V2EX_PROXY: *proxy  # 可选，引用顶部 proxy 锚点
       # V2EX_SSL_VERIFY: "false"             # 可选，是否验证SSL证书，默认false
 
   - name: "NodeSeek"

@@ -5,7 +5,8 @@ Bilibili 自动签到任务 v2
 基于 https://github.com/XiaoYiWeio/bili-checkin 改造，适配 LiteCron 框架。
 相比原 bilibili.py 的主要改进：
 - 从 BILIBILI_COOKIE 中提取 SESSDATA + bili_jct 双字段独立使用，规避 cookie
-  字符串分隔符差异导致的 CSRF 解析失败问题
+  字符串分隔符差异导致的 CSRF 解析失败问题；同时透传完整 Cookie 字符串，
+  让分享等加强风控的接口能通过校验（需在 Cookie 中包含 buvid3/buvid4 等字段）
 - 通过 /x/member/web/exp/reward 预检查任务状态，已完成任务自动跳过
 - 观看任务改用 popular 接口获取视频（含真实 cid）+ heartbeat 心跳上报，
   解决原脚本 cid=0 导致观看任务必失败的问题
@@ -14,7 +15,8 @@ Bilibili 自动签到任务 v2
 - 所有响应统一 None 安全处理，避免 'NoneType' object has no attribute 'get'
 
 环境变量（统一使用 BILIBILI_ 前缀）:
-- BILIBILI_COOKIE: B站登录 Cookie（必需，需包含 SESSDATA 和 bili_jct）
+- BILIBILI_COOKIE: B站登录 Cookie（必需，需包含 SESSDATA 和 bili_jct；
+  建议同时包含 buvid3/buvid4/b_nutss 等设备指纹字段以通过分享接口风控）
 - BILIBILI_COIN_NUM: 每日投币数量（默认 5）
 - BILIBILI_COIN_FOLLOW: 投币是否只给关注列表 UP 主（true/false，默认 false）
 - BILIBILI_WATCH_FOLLOW: 观看是否只看关注列表 UP 主视频（true/false，默认 false）
@@ -60,12 +62,17 @@ UA = (
 # 代理（由 main() 根据 BILIBILI_PROXY 设置，requests 代理字典或 None）
 PROXIES = None
 
+# 完整 Cookie 字符串（由 main() 根据 BILIBILI_COOKIE 设置）
+# 透传包含 buvid3/buvid4 等设备指纹字段的完整 Cookie，让分享等加强风控的接口能通过校验
+# 为空时回退到仅 SESSDATA+bili_jct 两字段（兼容旧配置，但分享接口可能失败）
+FULL_COOKIE = ""
+
 
 # ============ Cookie 解析 ============
 
 def parse_cookie_fields(cookie_str: str) -> tuple:
     """
-    从完整 Cookie 字符串中提取 SESSDATA 和 bili_jct
+    从完整 Cookie 字符串中提取 SESSDATA 和 bili_jct，并归一化完整 Cookie
 
     兼容分隔符 ';' 和 '; '，以及行首行尾空白。
 
@@ -73,13 +80,17 @@ def parse_cookie_fields(cookie_str: str) -> tuple:
         cookie_str: Cookie 字符串，格式: key1=value1; key2=value2
 
     Returns:
-        tuple: (sessdata, bili_jct)，未找到返回空字符串
+        tuple: (sessdata, bili_jct, full_cookie)
+            - sessdata/bili_jct: 单独提取的两字段（csrf 等场景需要）
+            - full_cookie: 归一化后的完整 Cookie 字符串（key=value; key=value 形式），
+              透传给请求头使用，确保 buvid3/buvid4 等设备指纹字段不丢失
     """
     sessdata = ""
     bili_jct = ""
+    pairs = []
 
     if not cookie_str:
-        return sessdata, bili_jct
+        return sessdata, bili_jct, ""
 
     # 统一分割：先按 ; 分割，再 strip 空白
     for item in cookie_str.split(";"):
@@ -89,20 +100,30 @@ def parse_cookie_fields(cookie_str: str) -> tuple:
         key, value = item.split("=", 1)
         key = key.strip()
         value = value.strip()
+        if not key:
+            continue
         if key == "SESSDATA":
             sessdata = value
         elif key == "bili_jct":
             bili_jct = value
+        pairs.append(f"{key}={value}")
 
-    return sessdata, bili_jct
+    full_cookie = "; ".join(pairs)
+    return sessdata, bili_jct, full_cookie
 
 
 def make_headers(sessdata: str, bili_jct: str, referer: str = "https://www.bilibili.com") -> dict:
-    """构造请求头，仅携带 SESSDATA 和 bili_jct 两个字段"""
+    """构造请求头
+
+    优先使用全局 FULL_COOKIE（包含 buvid3/buvid4 等设备指纹字段，分享接口风控必需）；
+    FULL_COOKIE 为空时回退到仅 SESSDATA+bili_jct 两字段（兼容旧配置）。
+    """
+    cookie = FULL_COOKIE if FULL_COOKIE else f"SESSDATA={sessdata}; bili_jct={bili_jct}"
     return {
         "User-Agent": UA,
-        "Cookie": f"SESSDATA={sessdata}; bili_jct={bili_jct}",
+        "Cookie": cookie,
         "Referer": referer,
+        "Origin": "https://www.bilibili.com",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     }
 
@@ -134,6 +155,14 @@ def http_post(url: str, data: dict, headers: dict, timeout: int = 15) -> dict:
 
 # ============ 任务接口 ============
 
+def _to_int(value, default: int = 0) -> int:
+    """安全转 int，B 站接口部分字段会返回字符串形式数字（如 next_exp="28800"）"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def get_user_info(sessdata: str, bili_jct: str) -> dict:
     """获取用户导航信息
 
@@ -150,13 +179,13 @@ def get_user_info(sessdata: str, bili_jct: str) -> dict:
     return {
         "uid": data.get("mid"),
         "name": data.get("uname"),
-        "level": level_info.get("current_level"),
-        "current_exp": level_info.get("current_exp"),
-        "next_exp": level_info.get("next_exp", 0),
-        "coins": data.get("money", 0),
+        "level": _to_int(level_info.get("current_level")),
+        "current_exp": _to_int(level_info.get("current_exp")),
+        "next_exp": _to_int(level_info.get("next_exp"), 0),
+        "coins": _to_int(data.get("money"), 0),
         "is_login": data.get("isLogin", False),
-        "vip_type": data.get("vipType", 0),
-        "vip_status": data.get("vipStatus", 0),
+        "vip_type": _to_int(data.get("vipType"), 0),
+        "vip_status": _to_int(data.get("vipStatus"), 0),
     }
 
 
@@ -188,7 +217,7 @@ def check_reward(sessdata: str, bili_jct: str) -> dict:
         "login": data.get("login", False),
         "watch": data.get("watch", data.get("watch_av", False)),
         "share": data.get("share", data.get("share_av", False)),
-        "coins": data.get("coins", data.get("coins_av", 0)),
+        "coins": _to_int(data.get("coins", data.get("coins_av", 0)), 0),
     }
 
 
@@ -445,7 +474,12 @@ def do_watch(
 
 
 def do_share(sessdata: str, bili_jct: str) -> dict:
-    """分享视频，+5 EXP"""
+    """分享视频，+5 EXP
+
+    分享接口风控较严，要求 Cookie 中包含 buvid3/buvid4 等设备指纹字段，
+    否则会返回「账号异常,操作失败」。若用户 Cookie 中未携带这些字段，
+    可通过 BILIBILI_SKIP_SHARE=true 跳过分享任务（仅损失 5 EXP）。
+    """
     video = pick_video(sessdata, bili_jct)
     if not video:
         return {"success": False, "message": "无法获取视频列表"}
@@ -464,6 +498,12 @@ def do_share(sessdata: str, bili_jct: str) -> dict:
     msg = resp.get("message", "未知错误") if resp else "请求失败"
     if "重复" in msg or "已分享" in msg:
         return {"success": True, "exp": 0, "video": video["title"], "message": "今日已分享"}
+    # 「账号异常」通常是 Cookie 缺失 buvid3/buvid4 等设备指纹字段导致的风控拦截
+    if "账号异常" in msg or "操作失败" in msg:
+        return {
+            "success": False,
+            "message": f"{msg}（建议在 BILIBILI_COOKIE 中补充 buvid3/buvid4 字段，或设置 BILIBILI_SKIP_SHARE=true 跳过）",
+        }
     return {"success": False, "message": msg}
 
 
@@ -564,7 +604,7 @@ def get_config() -> dict:
     所有配置项统一使用 BILIBILI_ 前缀，与其他任务的命名规范保持一致。
     """
     cookie = os.environ.get("BILIBILI_COOKIE", "")
-    sessdata, bili_jct = parse_cookie_fields(cookie)
+    sessdata, bili_jct, full_cookie = parse_cookie_fields(cookie)
 
     def env_bool(key: str, default: str = "false") -> bool:
         return os.environ.get(key, default).lower() == "true"
@@ -578,6 +618,7 @@ def get_config() -> dict:
     return {
         "sessdata": sessdata,
         "bili_jct": bili_jct,
+        "full_cookie": full_cookie,
         "coin_num": env_int("BILIBILI_COIN_NUM", 5),
         "coin_follow": env_bool("BILIBILI_COIN_FOLLOW"),
         "watch_follow": env_bool("BILIBILI_WATCH_FOLLOW"),
@@ -835,6 +876,19 @@ def main() -> int:
         log_info(f"已启用代理: {proxy}")
     else:
         log_debug("未配置代理，使用直连")
+
+    # 设置完整 Cookie（全局，所有请求共用）
+    # 透传 buvid3/buvid4 等设备指纹字段，让分享等加强风控的接口能通过校验
+    full_cookie = config.get("full_cookie", "")
+    if full_cookie:
+        globals()["FULL_COOKIE"] = full_cookie
+        # 检测是否包含分享接口风控所需的关键字段，缺失时给出提示
+        has_buvid = "buvid3" in full_cookie
+        if has_buvid:
+            log_debug("已加载完整 Cookie（含 buvid3 等设备指纹字段）")
+        else:
+            log_warning("Cookie 中未检测到 buvid3 字段，分享接口可能返回「账号异常,操作失败」")
+            log_warning("建议从浏览器导出完整 Cookie（包含 buvid3/buvid4/b_nutss 等字段）")
 
     log_debug(f"配置: coin_num={config['coin_num']} coin_follow={config['coin_follow']} "
               f"watch_follow={config['watch_follow']} skip_coin={config['skip_coin']} "

@@ -184,7 +184,7 @@ tasks:
 - 领取大会员权益（可选，基于 vipStatus 判定）
 
 **实现要点：**
-- 从 `BILIBILI_COOKIE` 中提取 `SESSDATA` 和 `bili_jct` 双字段独立使用，兼容 `;` 和 `; ` 两种分隔符，规避 cookie 字符串分隔符差异导致的 CSRF 解析失败问题
+- 从 `BILIBILI_COOKIE` 中提取 `SESSDATA` 和 `bili_jct` 双字段独立使用，兼容 `;` 和 `; ` 两种分隔符，规避 cookie 字符串分隔符差异导致的 CSRF 解析失败问题；同时归一化完整 Cookie 并透传给请求头，确保 `buvid3`/`buvid4`/`b_nutss` 等设备指纹字段不丢失（分享接口风控必需）
 - 通过 `/x/member/web/exp/reward` 预检查任务状态，已完成任务自动跳过
 - 观看任务改用 popular 接口获取视频（含真实 cid）+ heartbeat 心跳上报；开启 `BILIBILI_WATCH_FOLLOW` 后仅观看关注 UP 主视频（cid 为 0 时通过 view 接口解析真实 cid）
 - 投币/观看开启 `BILIBILI_COIN_FOLLOW` / `BILIBILI_WATCH_FOLLOW` 时，优先通过动态 feed 接口（`/x/polymer/web-dynamic/v1/feed/all?type=video`）单请求拉取关注 UP 主最新视频，请求量最小、风控最友好（走代理 IP 时尤其明显）；动态 feed 失败时回退到「随机采样 `BILIBILI_FOLLOW_SAMPLE` 个 UP 主 + `/x/space/arc/search` 取最新投稿」；两次均失败则本轮自动降级为热门视频（仅告警一次）
@@ -193,7 +193,7 @@ tasks:
 - 所有响应统一 None 安全处理，避免 `'NoneType' object has no attribute 'get'`
 
 **环境变量：**
-- `BILIBILI_COOKIE`: B站登录 Cookie（必需，需包含 `SESSDATA` 和 `bili_jct`）
+- `BILIBILI_COOKIE`: B站登录 Cookie（必需，需包含 `SESSDATA` 和 `bili_jct`；建议从浏览器导出完整 Cookie，包含 `buvid3`/`buvid4`/`b_nutss` 等设备指纹字段——分享接口风控必需，缺失会返回「账号异常,操作失败」）
 - `BILIBILI_PROXY`: HTTP(S) 代理地址（可选，如 `http://127.0.0.1:7890`，留空则直连）
 - `BILIBILI_COIN_NUM`: 每日投币数量（默认5）
 - `BILIBILI_COIN_FOLLOW`: 投币是否只给关注列表 UP 主（true/false，默认false）
@@ -216,7 +216,9 @@ tasks:
     description: "B站每日任务"
     enabled: true
     env:
-      BILIBILI_COOKIE: "SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
+      BILIBILI_COOKIE: "SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx; buvid3=xxx; buvid4=xxx; b_nutss=xxx"
+      # ↑ 建议从浏览器导出完整 Cookie（含 buvid3/buvid4/b_nutss 等设备指纹字段），
+      #   分享接口风控必需；只有 SESSDATA+bili_jct 会返回「账号异常,操作失败」
       BILIBILI_COIN_NUM: "5"
       BILIBILI_SKIP_COIN: "false"
       BILIBILI_SKIP_SHARE: "false"

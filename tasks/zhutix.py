@@ -301,7 +301,17 @@ def sign(cookie: str, proxy: Optional[str] = None) -> bool:
             log_warning(f"签到响应非 JSON 格式: {response.text[:200]}")
             return False
 
-        gain = _to_int(res_data, 0)
+        # 兼容两种响应格式：
+        # - 数字（旧版/简化）：直接表示本次签到获得的锋币数
+        # - dict（新版）：顶层 credit 为本次锋币，mission 子对象含完整签到信息
+        if isinstance(res_data, dict):
+            gain = _to_int(res_data.get("credit"), 0)
+            if gain == 0:
+                mission = res_data.get("mission") or {}
+                gain = _to_int(mission.get("credit"), 0)
+        else:
+            gain = _to_int(res_data, 0)
+
         if gain > 0:
             log_success(f"签到成功！获得 {gain} 锋币")
             return True

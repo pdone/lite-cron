@@ -1246,39 +1246,29 @@ body::before {
     color: var(--text-primary);
     box-shadow: var(--shadow-xl);
     border: 1px solid var(--border-color);
+    border-left: 3px solid var(--border-color);
     display: flex;
     align-items: center;
     gap: var(--spacing-md);
     animation: toastIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     min-width: 320px;
     max-width: 450px;
-    position: relative;
-    overflow: hidden;
 }
 
-.toast::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 4px;
+.toast.success {
+    border-left-color: var(--accent-success);
 }
 
-.toast.success::before {
-    background: var(--accent-success);
+.toast.error {
+    border-left-color: var(--accent-danger);
 }
 
-.toast.error::before {
-    background: var(--accent-danger);
+.toast.warning {
+    border-left-color: var(--accent-warning);
 }
 
-.toast.warning::before {
-    background: var(--accent-warning);
-}
-
-.toast.info::before {
-    background: var(--accent-info);
+.toast.info {
+    border-left-color: var(--accent-info);
 }
 
 @keyframes toastIn {

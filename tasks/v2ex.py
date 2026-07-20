@@ -117,7 +117,10 @@ class V2ex:
     def _is_already_signed(self, html: str) -> bool:
         """检测页面是否表示今日已签到
 
-        已签到时 V2EX 显示"每日登录奖励已领取"，按钮变为"查看我的账户余额"。
+        V2EX 已签到时页面会显示"每日登录奖励已领取"提示。
+        注意：不能使用"查看我的账户余额"或"已连续登录"作为判断依据，
+        这两个文字在未签到状态下也会出现在页面其他位置（账户链接、历史统计），
+        会导致误判已签到而跳过签到。
 
         Args:
             html: 签到页面 HTML 内容
@@ -125,8 +128,7 @@ class V2ex:
         Returns:
             bool: True 表示今日已签到
         """
-        markers = ("每日登录奖励已领取", "已连续登录", "查看我的账户余额")
-        return any(marker in html for marker in markers)
+        return "每日登录奖励已领取" in html
 
     def _parse_user_info(self, html: str) -> Dict[str, str]:
         """从页面解析用户信息
