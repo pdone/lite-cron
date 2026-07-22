@@ -6,7 +6,9 @@ const state = {
     tasks: [],
     logs: [],
     containerStatus: null,
-    isRunning: false
+    isRunning: false,
+    sortColumn: null,
+    sortDirection: 'asc'
 };
 
 const elements = {
@@ -48,7 +50,6 @@ const elements = {
     editScheduleHint: document.getElementById('edit-schedule-hint'),
     editScript: document.getElementById('edit-script'),
     editScriptHint: document.getElementById('edit-script-hint'),
-    editEnabled: document.getElementById('edit-enabled'),
     cronPreview: document.getElementById('cron-preview'),
     cronNextRun: document.getElementById('cron-next-run'),
     cronDesc: document.getElementById('cron-desc'),
@@ -64,12 +65,46 @@ const editState = {
     originalName: '',       // 当前正在编辑的任务原始名（URL 中使用）
     allTaskNames: [],       // 系统中所有任务名（用于唯一性校验）
     envAliasKeys: new Set(),// 当前任务的别名键集合（只读展示）
+    enabled: false,         // 当前任务的启用状态（编辑时不修改）
     isSaving: false,
     cronTimer: null,        // cron 实时校验防抖
     scriptTimer: null       // script 实时校验防抖
 };
 
+const SORT_STORAGE_KEY = 'litecron_task_sort';
+
+function loadSortState() {
+    try {
+        const saved = localStorage.getItem(SORT_STORAGE_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && parsed.column && ['asc', 'desc'].includes(parsed.direction)) {
+                state.sortColumn = parsed.column;
+                state.sortDirection = parsed.direction;
+            }
+        }
+    } catch (e) {
+        console.warn('读取排序状态失败:', e);
+    }
+}
+
+function saveSortState() {
+    try {
+        if (state.sortColumn) {
+            localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({
+                column: state.sortColumn,
+                direction: state.sortDirection
+            }));
+        } else {
+            localStorage.removeItem(SORT_STORAGE_KEY);
+        }
+    } catch (e) {
+        console.warn('保存排序状态失败:', e);
+    }
+}
+
 function init() {
+    loadSortState();
     bindEvents();
     loadData(false);
 }
@@ -169,6 +204,14 @@ function bindEvents() {
             closeAllModals();
         }
     });
+
+    // 表头排序事件
+    document.querySelectorAll('#task-table th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+            const column = th.dataset.sort;
+            handleSort(column);
+        });
+    });
 }
 
 async function loadData(reload = false) {
@@ -221,7 +264,7 @@ async function loadTasks() {
         
         const enabledCount = state.tasks.filter(t => t.enabled).length;
         elements.taskCount.textContent = state.tasks.length || 0;
-        elements.enabledCount.textContent = `${enabledCount} 个启用`;
+        elements.enabledCount.textContent = enabledCount;
         
         if (state.tasks.length === 0 && data.config_exists === false) {
             elements.taskList.innerHTML = `
@@ -237,6 +280,7 @@ async function loadTasks() {
         }
         
         renderTasks();
+        updateSortIcons();
         lucide.createIcons();
 
     } catch (error) {
@@ -257,10 +301,63 @@ async function loadTasks() {
     }
 }
 
+function handleSort(column) {
+    if (state.sortColumn === column) {
+        if (state.sortDirection === 'asc') {
+            state.sortDirection = 'desc';
+        } else {
+            state.sortColumn = null;
+            state.sortDirection = 'asc';
+        }
+    } else {
+        state.sortColumn = column;
+        state.sortDirection = 'asc';
+    }
+    renderTasks();
+    updateSortIcons();
+    saveSortState();
+}
+
+function updateSortIcons() {
+    document.querySelectorAll('#task-table th.sortable').forEach(th => {
+        const column = th.dataset.sort;
+        const icon = th.querySelector('.sort-icon');
+        if (!icon) return;
+        th.classList.remove('active');
+        if (state.sortColumn === column) {
+            th.classList.add('active');
+            icon.setAttribute('data-lucide', state.sortDirection === 'asc' ? 'arrow-up' : 'arrow-down');
+        } else {
+            icon.setAttribute('data-lucide', 'arrow-up-down');
+        }
+    });
+    lucide.createIcons({ root: document.getElementById('task-table') });
+}
+
+function getSortedTasks(tasks) {
+    if (!state.sortColumn) return tasks;
+    const col = state.sortColumn;
+    const dir = state.sortDirection === 'asc' ? 1 : -1;
+    return [...tasks].sort((a, b) => {
+        let valA, valB;
+        if (col === 'enabled') {
+            valA = a.enabled ? 1 : 0;
+            valB = b.enabled ? 1 : 0;
+        } else {
+            valA = (a[col] || '').toString().toLowerCase();
+            valB = (b[col] || '').toString().toLowerCase();
+        }
+        if (valA < valB) return -1 * dir;
+        if (valA > valB) return 1 * dir;
+        return 0;
+    });
+}
+
 function renderTasks() {
     const mobileTaskList = document.getElementById('mobile-task-list');
-    
-    if (state.tasks.length === 0) {
+    const tasks = getSortedTasks(state.tasks);
+
+    if (tasks.length === 0) {
         elements.taskList.innerHTML = `
             <tr>
                 <td colspan="6" class="empty-state">
@@ -283,7 +380,7 @@ function renderTasks() {
         return;
     }
     
-    elements.taskList.innerHTML = state.tasks.map(task => `
+    elements.taskList.innerHTML = tasks.map(task => `
         <tr data-task-name="${task.name}" class="task-row">
             <td>
                 <span class="task-status ${task.enabled ? 'enabled' : 'disabled'}">
@@ -334,7 +431,7 @@ function renderTasks() {
     `).join('');
     
     if (mobileTaskList) {
-        mobileTaskList.innerHTML = state.tasks.map(task => `
+        mobileTaskList.innerHTML = tasks.map(task => `
             <div class="mobile-task-card" data-task-name="${task.name}">
                 <div class="mobile-task-header">
                     <span class="mobile-task-name">${task.name}</span>
@@ -745,15 +842,15 @@ async function editTask(taskName) {
         const task = data.task;
         editState.originalName = task.original_name || taskName;
         editState.allTaskNames = task.all_task_names || [];
+        editState.enabled = !!task.enabled;
         editState.envAliasKeys = new Set(
             (task.env || []).filter(e => e.is_alias).map(e => e.key)
         );
-        
+
         elements.editName.value = task.name;
         elements.editDescription.value = task.description;
         elements.editSchedule.value = task.schedule;
         elements.editScript.value = task.script;
-        elements.editEnabled.checked = task.enabled;
         
         // 渲染 env 列表
         elements.envList.innerHTML = '';
@@ -782,6 +879,7 @@ function resetEditForm() {
     elements.envList.innerHTML = '';
     editState.originalName = '';
     editState.allTaskNames = [];
+    editState.enabled = false;
     editState.envAliasKeys = new Set();
     setHint(elements.editNameHint, '', '');
     setHint(elements.editScheduleHint, '', '');
@@ -937,7 +1035,7 @@ function collectFormData() {
         description: elements.editDescription.value.trim(),
         schedule: elements.editSchedule.value.trim(),
         script: elements.editScript.value.trim(),
-        enabled: elements.editEnabled.checked,
+        enabled: editState.enabled,
         env
     };
 }

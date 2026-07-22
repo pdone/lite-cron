@@ -22,53 +22,66 @@
                         <span class="logo-version">v{{ app_version }}</span>
                     </div>
                 </div>
-                <div class="header-stats">
-                    <div class="stat-item">
-                        <span class="stat-value" id="task-count">-</span>
-                        <span class="stat-label">任务</span>
-                    </div>
-                </div>
             </div>
         </header>
 
         <main class="main">
-            <div class="toolbar">
-                <button class="btn btn-secondary" id="btn-logs">
-                    <i data-lucide="search" class="btn-icon"></i>
-                    查看日志
-                </button>
-                <button class="btn btn-secondary" id="btn-refresh" title="重载配置">
-                    <i data-lucide="refresh-cw" class="btn-icon"></i>
-                    重载配置
-                </button>
-                <button class="btn btn-secondary" id="btn-enable-all" title="全部启用">
-                    <i data-lucide="play" class="btn-icon"></i>
-                    全部启用
-                </button>
-                <button class="btn btn-secondary" id="btn-disable-all" title="全部禁用">
-                    <i data-lucide="pause" class="btn-icon"></i>
-                    全部禁用
-                </button>
-            </div>
-
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title">
                         <i data-lucide="list-todo" class="title-icon"></i>
                         定时任务
                     </h2>
-                    <span class="badge" id="enabled-count">0 个启用</span>
+                    <div class="card-actions">
+                        <button class="btn btn-sm btn-secondary" id="btn-logs" title="查看日志">
+                            <i data-lucide="search" class="btn-icon"></i>
+                            查看日志
+                        </button>
+                        <button class="btn btn-sm btn-secondary" id="btn-refresh" title="重载配置">
+                            <i data-lucide="refresh-cw" class="btn-icon"></i>
+                            重载配置
+                        </button>
+                        <button class="btn btn-sm btn-secondary" id="btn-enable-all" title="全部启用">
+                            <i data-lucide="play" class="btn-icon"></i>
+                            全部启用
+                        </button>
+                        <button class="btn btn-sm btn-secondary" id="btn-disable-all" title="全部禁用">
+                            <i data-lucide="pause" class="btn-icon"></i>
+                            全部禁用
+                        </button>
+                    </div>
+                    <div class="card-stats">
+                        <span class="stat-badge stat-badge-success">
+                            <span class="status-dot"></span>
+                            <span class="stat-num" id="enabled-count">-</span>
+                            <span class="stat-text">启用</span>
+                        </span>
+                        <span class="stat-badge">
+                            <span class="stat-num" id="task-count">-</span>
+                            <span class="stat-text">任务</span>
+                        </span>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="table-container">
                         <table class="data-table" id="task-table">
                             <thead>
                                 <tr>
-                                    <th>状态</th>
-                                    <th>任务名称</th>
-                                    <th>调度规则</th>
-                                    <th>描述</th>
-                                    <th>下次执行</th>
+                                    <th class="sortable" data-sort="enabled">
+                                        <span class="th-content">状态<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
+                                    </th>
+                                    <th class="sortable" data-sort="name">
+                                        <span class="th-content">任务名称<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
+                                    </th>
+                                    <th class="sortable" data-sort="schedule">
+                                        <span class="th-content">调度规则<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
+                                    </th>
+                                    <th class="sortable" data-sort="description">
+                                        <span class="th-content">描述<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
+                                    </th>
+                                    <th class="sortable" data-sort="next_run">
+                                        <span class="th-content">下次执行<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
+                                    </th>
                                     <th class="col-actions">操作</th>
                                 </tr>
                             </thead>
@@ -161,11 +174,6 @@
                     <i data-lucide="pencil" class="title-icon"></i>
                     编辑任务
                 </h3>
-                <label class="switch" title="启用/禁用任务">
-                    <input type="checkbox" id="edit-enabled" checked />
-                    <span class="switch-track"></span>
-                    <span class="switch-label">启用</span>
-                </label>
                 <button class="modal-close" id="edit-modal-close" aria-label="关闭">&times;</button>
             </div>
             <div class="modal-body">
