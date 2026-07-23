@@ -10,7 +10,7 @@ import os
 import sys
 import subprocess
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -21,6 +21,8 @@ from flask import (
     request,
     Response,
     send_from_directory,
+    session,
+    redirect,
 )
 
 # 导入日志模块
@@ -55,6 +57,13 @@ APP_VERSION = get_app_version()
 
 app = Flask(__name__)
 app.template_folder = str(TEMPLATE_DIR)
+
+# 鉴权配置（在 __main__ 启动时根据环境变量/config.yml 覆盖）
+# AUTH_TOKEN 为空表示鉴权关闭（此时应仅绑定 127.0.0.1 本地访问）
+AUTH_TOKEN: Optional[str] = None
+WEBUI_HOST: str = "127.0.0.1"
+# Session 有效期（天），默认 7；登录后浏览器 Cookie 保留指定天数
+SESSION_DAYS: int = 7
 
 
 def load_config() -> Optional[Dict[str, Any]]:
@@ -571,10 +580,67 @@ def format_size(size_bytes: int) -> str:
 # ============== 路由 ==============
 
 
+@app.before_request
+def require_auth():
+    """统一鉴权：有效 Session 或 Bearer Token 才放行，否则跳登录或 401
+
+    鉴权关闭（AUTH_TOKEN 为空）时全部放行；此时应配合 WEBUI_HOST=127.0.0.1
+    保证仅本地可访问。白名单：/login 与 /static/*。
+    """
+    if not AUTH_TOKEN:
+        return None
+    path = request.path
+    if path == "/login" or path.startswith("/static/"):
+        return None
+    # 1) Session Cookie 已登录
+    if session.get("logged_in"):
+        return None
+    # 2) Bearer Token（供脚本/curl 自动化调用）
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        if token and token == AUTH_TOKEN:
+            return None
+    # 未通过：API 返回 401，页面跳转登录
+    if path.startswith("/api/"):
+        return jsonify({"error": "unauthorized", "message": "鉴权失败，请登录"}), 401
+    return redirect("/login")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """登录页：POST 校验 token 并写入 Session"""
+    # 鉴权关闭时直接回首页
+    if not AUTH_TOKEN:
+        return redirect("/")
+    if request.method == "POST":
+        token = (request.form.get("token") or "").strip()
+        if token and token == AUTH_TOKEN:
+            # 启用永久 Session，有效期由 app.permanent_session_lifetime 控制
+            session.permanent = True
+            session["logged_in"] = True
+            log_info("[WebUI] 用户登录成功")
+            return redirect("/")
+        log_warning("[WebUI] 登录失败：令牌无效")
+        return render_template("login.html", error="令牌无效，请重试"), 401
+    return render_template("login.html", error=None)
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    """退出登录：清空 Session 后跳登录页"""
+    session.clear()
+    return redirect("/login")
+
+
 @app.route("/")
 def index():
     """首页"""
-    return render_template("index.html", app_version=APP_VERSION)
+    return render_template(
+        "index.html",
+        app_version=APP_VERSION,
+        auth_enabled=bool(AUTH_TOKEN),
+    )
 
 
 @app.route("/static/<path:filename>")
@@ -1094,13 +1160,67 @@ if __name__ == "__main__":
     # 从环境变量读取端口，默认 5000
     port = int(os.environ.get("WEBUI_PORT", 5000))
 
-    # 从配置文件读取 debug 设置，默认 False
+    # 从配置文件读取 webui 设置
     config = load_config()
-    debug_mode = False
-    if config and "webui" in config:
-        debug_mode = config["webui"].get("debug", False)
+    webui_cfg = {}
+    if config and isinstance(config, dict) and "webui" in config:
+        webui_cfg = config["webui"] or {}
+    debug_mode = bool(webui_cfg.get("debug", False))
 
-    log_info(f"正在启动 LiteCron Web 管理界面 (端口: {port}, 调试模式: {debug_mode})")
+    # 鉴权与绑定配置：环境变量优先于 config.yml，默认 127.0.0.1 本地回环
+    AUTH_TOKEN = os.environ.get("WEBUI_TOKEN") or (
+        webui_cfg.get("token") if webui_cfg else None
+    )
+    WEBUI_HOST = (
+        os.environ.get("WEBUI_HOST")
+        or (webui_cfg.get("host") if webui_cfg else None)
+        or "127.0.0.1"
+    )
+
+    # Session 有效期：环境变量 WEBUI_SESSION_DAYS 优先于 config.yml，默认 7 天
+    # 仅在鉴权启用时生效；非法值（<=0 或非数字）回退为 7 天
+    session_days_raw = os.environ.get("WEBUI_SESSION_DAYS") or (
+        webui_cfg.get("session_days") if webui_cfg else None
+    )
+    try:
+        session_days = int(session_days_raw) if session_days_raw else 7
+        if session_days <= 0:
+            raise ValueError("must be > 0")
+    except (TypeError, ValueError):
+        log_warning(
+            f"[WebUI] 无效的 WEBUI_SESSION_DAYS={session_days_raw!r}，回退为默认 7 天"
+        )
+        session_days = 7
+    SESSION_DAYS = session_days
+    app.permanent_session_lifetime = timedelta(days=SESSION_DAYS)
+
+    # 安全检查：绑定 0.0.0.0 但未配置 token => 拒绝启动，防止公网裸奔
+    if WEBUI_HOST in ("0.0.0.0", "::") and not AUTH_TOKEN:
+        log_error(
+            "[WebUI] 安全检查失败：WEBUI_HOST=0.0.0.0 但未配置 WEBUI_TOKEN，"
+            "拒绝启动以避免未授权公网访问"
+        )
+        log_error(
+            "[WebUI] 请设置 WEBUI_TOKEN 环境变量（或 config.yml 的 webui.token），"
+            "或保持 WEBUI_HOST=127.0.0.1（默认，仅本地可访问）"
+        )
+        sys.exit(1)
+
+    # 设置 Session 密钥（派生自 token；token 变更则历史 session 失效）
+    if AUTH_TOKEN:
+        app.secret_key = AUTH_TOKEN
+        log_info(
+            f"[WebUI] 鉴权已启用（Token 模式，Session 有效期 {SESSION_DAYS} 天，"
+            "支持 Session 与 Bearer 两种方式）"
+        )
+    else:
+        log_warning(
+            "[WebUI] 未配置 WEBUI_TOKEN，WebUI 无鉴权（仅本地回环 127.0.0.1 可访问）"
+        )
+
+    log_info(
+        f"正在启动 LiteCron Web 管理界面 (绑定: {WEBUI_HOST}:{port}, 调试模式: {debug_mode})"
+    )
     log_info(f"APP_DIR: {PROJECT_ROOT}")
 
-    app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)
+    app.run(host=WEBUI_HOST, port=port, debug=debug_mode, threaded=True)

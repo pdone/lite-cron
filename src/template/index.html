@@ -22,6 +22,14 @@
                         <span class="logo-version">v{{ app_version }}</span>
                     </div>
                 </div>
+                {% if auth_enabled %}
+                <div class="header-actions">
+                    <button class="btn btn-sm btn-secondary" id="btn-logout" title="退出登录">
+                        <i data-lucide="log-out" class="btn-icon"></i>
+                        退出
+                    </button>
+                </div>
+                {% endif %}
             </div>
         </header>
 

@@ -48,7 +48,8 @@ lite-cron/
 │   ├── logger.sh                 # Unified logging module (Shell)
 │   ├── entrypoint.sh             # Container startup entry
 │   ├── 📁 template/              # HTML templates
-│   │   └── index.html            # Main page template
+│   │   ├── index.html            # Main page template
+│   │   └── login.html            # Login page template
 │   └── 📁 static/                # Static assets
 │       ├── app.js                # Frontend logic
 │       └── style.css             # Styles
@@ -144,6 +145,55 @@ python manage.py status
 Open browser: **http://localhost:5000**
 
 ![WebUI](/assets/page.png)
+
+## Security
+
+The WebUI **binds only to the loopback address `127.0.0.1` by default**, so it cannot be reached directly from external networks. To expose it publicly you **must** meet all of the following, otherwise a startup safety check will refuse to launch:
+
+1. Set an access token `WEBUI_TOKEN` (a strong random secret)
+2. Set `WEBUI_HOST=0.0.0.0` (listen on all interfaces inside the container, fronted by a reverse proxy)
+3. Put a reverse proxy in front providing HTTPS and access control (adding Basic Auth / OAuth at the proxy layer is strongly recommended)
+
+> ⚠️ If `WEBUI_HOST=0.0.0.0` is set but `WEBUI_TOKEN` is not configured, the WebUI **refuses to start** to prevent unauthenticated public access.
+
+### Configuring the Token
+
+Two options (environment variable takes precedence; recommended to avoid storing plaintext in the config file):
+
+**Option 1: Environment variable (recommended for Docker)**
+
+Add to the `environment` section of `compose.yml`:
+
+```yaml
+environment:
+  - WEBUI_TOKEN=change-me-to-a-long-random-secret
+  # Optional: enable only after the token is set and public access is required
+  # - WEBUI_HOST=0.0.0.0
+```
+
+**Option 2: config.yml**
+
+```yaml
+webui:
+  token: "change-me-to-a-long-random-secret"
+  # host: "127.0.0.1"   # local-only by default
+```
+
+### Access Methods
+
+- **Browser**: any page redirects to `/login`; enter the token to log in (a session cookie is set with a default lifetime of **7 days** — it survives browser restarts). Customize via the `WEBUI_SESSION_DAYS` environment variable or `webui.session_days` in `config.yml`; restart the container for changes to take effect.
+- **Scripts/automation**: send the token in a header (Bearer Token is not subject to the session lifetime — it works on every request), e.g.:
+  ```bash
+  curl -H "Authorization: Bearer change-me-to-a-long-random-secret" http://localhost:5000/api/tasks
+  ```
+
+### Generating a Strong Token
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+> After changing the token you must restart the container (`python manage.py restart`) for it to take effect; existing sessions become invalid.
 
 ## Usage Guide
 

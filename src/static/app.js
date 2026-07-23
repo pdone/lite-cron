@@ -73,6 +73,17 @@ const editState = {
 
 const SORT_STORAGE_KEY = 'litecron_task_sort';
 
+// 401 鉴权失效拦截：统一跳转登录页（fetch 包装，对所有 API 调用生效）
+const _originalFetch = window.fetch;
+window.fetch = function (input, init) {
+    return _originalFetch.call(this, input, init).then(response => {
+        if (response.status === 401) {
+            window.location.href = '/login';
+        }
+        return response;
+    });
+};
+
 function loadSortState() {
     try {
         const saved = localStorage.getItem(SORT_STORAGE_KEY);
@@ -212,6 +223,19 @@ function bindEvents() {
             handleSort(column);
         });
     });
+
+    // 退出登录（仅在鉴权启用时渲染）
+    const btnLogout = document.getElementById('btn-logout');
+    if (btnLogout) {
+        btnLogout.addEventListener('click', async () => {
+            try {
+                await fetch('/logout', { method: 'POST' });
+            } catch (e) {
+                // 忽略网络错误，仍跳转登录页
+            }
+            window.location.href = '/login';
+        });
+    }
 }
 
 async function loadData(reload = false) {

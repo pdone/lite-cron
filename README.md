@@ -48,7 +48,8 @@ lite-cron/
 │   ├── logger.sh                 # 统一日志管理模块（Shell）
 │   ├── entrypoint.sh             # 容器启动入口
 │   ├── 📁 template/              # HTML 模板目录
-│   │   └── index.html            # 主页面模板
+│   │   ├── index.html            # 主页面模板
+│   │   └── login.html            # 登录页模板
 │   └── 📁 static/                # 静态资源目录
 │       ├── app.js                # 前端交互逻辑
 │       └── style.css             # 样式文件
@@ -145,6 +146,55 @@ python manage.py status
 打开浏览器访问：**http://localhost:5000**
 
 ![WebUI](/assets/page_cn.png)
+
+## 安全
+
+WebUI 默认 **仅绑定本地回环 `127.0.0.1`**，无法被外部网络直接访问。如需公网暴露，**必须**同时满足以下条件，否则会因安全检查失败拒绝启动：
+
+1. 设置访问令牌 `WEBUI_TOKEN`（高强度随机串）
+2. 设置 `WEBUI_HOST=0.0.0.0`（容器内监听所有网卡，交给反向代理收口）
+3. 前置反向代理提供 HTTPS 与访问控制（强烈建议在反向代理层再加一层 Basic Auth / OAuth）
+
+> ⚠️ `WEBUI_HOST=0.0.0.0` 但未配置 `WEBUI_TOKEN` 时，WebUI 会**拒绝启动**，防止未授权公网访问。
+
+### 配置令牌
+
+两种方式（环境变量优先级更高，推荐使用环境变量避免明文写入配置文件）：
+
+**方式一：环境变量（推荐，用于 Docker）**
+
+在 `compose.yml` 的 `environment` 中添加：
+
+```yaml
+environment:
+  - WEBUI_TOKEN=change-me-to-a-long-random-secret
+  # 可选：仅在 token 已设置且需公网访问时开启
+  # - WEBUI_HOST=0.0.0.0
+```
+
+**方式二：config.yml**
+
+```yaml
+webui:
+  token: "change-me-to-a-long-random-secret"
+  # host: "127.0.0.1"   # 默认仅本地
+```
+
+### 访问方式
+
+- **浏览器**：访问任意页面会被重定向到 `/login`，输入令牌登录后写入 Session Cookie，默认有效期 **7 天**（浏览器关闭后仍保留）。可通过环境变量 `WEBUI_SESSION_DAYS` 或 `config.yml` 的 `webui.session_days` 自定义；修改后需重启容器生效。
+- **脚本/自动化**：在请求头携带令牌（Bearer Token 不受 Session 有效期限制，每次请求都生效），例如：
+  ```bash
+  curl -H "Authorization: Bearer change-me-to-a-long-random-secret" http://localhost:5000/api/tasks
+  ```
+
+### 生成强令牌
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+> 修改令牌后需重启容器（`python manage.py restart`）才能生效，历史 Session 会失效。
 
 ## 使用指南
 

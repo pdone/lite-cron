@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiteCron · 登录</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .login-wrap {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .login-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+            padding: 40px;
+            width: 100%;
+            max-width: 380px;
+        }
+        .login-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 28px;
+            justify-content: center;
+        }
+        .login-logo img {
+            width: 36px;
+            height: 36px;
+        }
+        .login-logo h1 {
+            font-size: 20px;
+            margin: 0;
+            color: var(--text-primary);
+        }
+        .login-form label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .login-form .form-control {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .login-error {
+            color: var(--accent-danger);
+            font-size: 13px;
+            margin-top: 12px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .login-btn {
+            width: 100%;
+            margin-top: 20px;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+        .login-hint {
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 24px;
+            line-height: 1.6;
+        }
+        .login-hint code {
+            color: var(--text-secondary);
+            background: var(--bg-input);
+            padding: 1px 5px;
+            border-radius: 4px;
+        }
+        .inline-icon {
+            width: 14px;
+            height: 14px;
+            vertical-align: -2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-wrap">
+        <div class="login-card">
+            <div class="login-logo">
+                <img src="{{ url_for('static', filename='favicon.svg') }}" alt="LiteCron">
+                <h1>LiteCron</h1>
+            </div>
+            <form class="login-form" method="POST" action="/login" autocomplete="off">
+                <label for="token">访问令牌</label>
+                <input
+                    type="password"
+                    id="token"
+                    name="token"
+                    class="form-control mono"
+                    placeholder="输入访问令牌"
+                    autofocus
+                    required>
+                {% if error %}
+                <div class="login-error">
+                    <i data-lucide="alert-circle" class="inline-icon"></i>
+                    {{ error }}
+                </div>
+                {% endif %}
+                <button type="submit" class="btn btn-primary login-btn">
+                    <i data-lucide="log-in" class="btn-icon"></i>
+                    登录
+                </button>
+            </form>
+            <div class="login-hint">
+                令牌由环境变量 <code>WEBUI_TOKEN</code><br>
+                或 <code>config.yml</code> 的 <code>webui.token</code> 配置
+            </div>
+        </div>
+    </div>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

@@ -144,3 +144,15 @@ notify:
 # WebUI 配置
 webui:
   debug: false                 # 是否启用 Flask 调试模式（true/false，默认false）
+  # 鉴权令牌：设置后 WebUI 需登录（浏览器 /login 页）或携带 Authorization: Bearer <token> 才能访问
+  # - 留空则关闭鉴权，此时 host 必须保持 127.0.0.1（默认）避免公网裸奔
+  # - 推荐用环境变量 WEBUI_TOKEN 配置，避免明文写入本文件；环境变量优先级高于此处的值
+  # token: "change-me-to-a-long-random-secret"
+  # 绑定地址：默认 127.0.0.1（仅本地回环）
+  # - 公网暴露须同时设置 token 并配合反向代理(HTTPS)；设为 0.0.0.0 但未配置 token 将拒绝启动
+  # - 环境变量 WEBUI_HOST 优先级高于此处的值
+  # host: "127.0.0.1"
+  # 登录 Session 有效期（天）：默认 7；浏览器关闭后 Cookie 仍保留指定天数
+  # - 仅在 token 已设置时生效；非法值（<=0 或非数字）自动回退为 7
+  # - 环境变量 WEBUI_SESSION_DAYS 优先级高于此处的值
+  # session_days: 7

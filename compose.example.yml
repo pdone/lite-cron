@@ -14,8 +14,16 @@ services:
       - PYTHONPATH=/app
       - WEBUI=true
       - WEBUI_PORT=5000
+      # WebUI 鉴权（强烈建议开启）：
+      #   - 未设置 WEBUI_TOKEN 时，WebUI 无鉴权，必须保持下方端口仅绑定 127.0.0.1
+      #   - 设置 WEBUI_TOKEN 后，浏览器访问 /login 输入令牌登录；脚本可用 Authorization: Bearer <token>
+      #   - WEBUI_HOST 默认 127.0.0.1（仅本地）；公网暴露需同时设置 WEBUI_HOST=0.0.0.0 + WEBUI_TOKEN + 反向代理(HTTPS)
+      # - WEBUI_TOKEN=change-me-to-a-long-random-secret   # 鉴权令牌，请改为高强度随机串
+      # - WEBUI_HOST=0.0.0.0                                # 仅在 token 已设置且需公网访问时取消注释
+      # - WEBUI_SESSION_DAYS=7                              # 登录 Session 有效期（天），默认 7
     ports:
-      - "5000:5000"
+      # 默认仅绑定本地回环，避免未授权公网访问；如需公网暴露请配合 WEBUI_TOKEN + 反向代理
+      - "127.0.0.1:5000:5000"
     volumes:
       - ./config.yml:/app/config.yml
       # - ./tasks:/app/tasks          # 内置脚本不建议挂载到主机 除非有明确需求需要修改
