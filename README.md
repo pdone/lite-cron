@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![logo](/assets/logo.png)
+![logo](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/logo.png)
 
 ![Docker](https://img.shields.io/badge/Docker-20.10+-blue?logo=docker)
 ![Python](https://img.shields.io/badge/Python-3.11+-green?logo=python)
@@ -129,7 +129,7 @@ docker compose up -d
 
 > 完整示例见 [compose.example.yml](./compose.example.yml)
 
-![Docker](/assets/usage.png)
+![Docker](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/usage.png)
 
 #### 手动构建并启动容器
 ```bash
@@ -145,7 +145,15 @@ python manage.py status
 
 打开浏览器访问：**http://localhost:5000**
 
-![WebUI](/assets/page_cn.png)
+#### 授权验证
+![WebUI 授权验证](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/page_auth.png)
+
+#### 主界面
+
+![WebUI](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/page.png)
+
+#### 移动端
+![WebUI 移动端](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/page_mobile.png)
 
 ## 安全
 
@@ -208,7 +216,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 python manage.py              # 启动交互式菜单
 ```
 
-![Manage Menu](/assets/manage.png)
+![Manage Menu](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/manage.png)
 
 #### 命令行模式
 

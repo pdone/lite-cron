@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![logo](/assets/logo.png)
+![logo](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/logo.png)
 
 ![Docker](https://img.shields.io/badge/Docker-20.10+-blue?logo=docker)
 ![Python](https://img.shields.io/badge/Python-3.11+-green?logo=python)
@@ -128,7 +128,7 @@ docker compose up -d
 
 > Full example see [compose.example.yml](./compose.example.yml)
 
-![Docker](/assets/usage.png)
+![Docker](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/usage.png)
 
 #### Manual Build and Start
 ```bash
@@ -144,7 +144,15 @@ python manage.py status
 
 Open browser: **http://localhost:5000**
 
-![WebUI](/assets/page.png)
+#### Authentication
+![WebUI Authentication](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/page_auth.png)
+
+#### Main Interface
+
+![WebUI](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/page.png)
+
+#### Mobile
+![WebUI Mobile](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/page_mobile.png)
 
 ## Security
 
@@ -207,7 +215,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 python manage.py              # Start interactive menu
 ```
 
-![Manage Menu](/assets/manage.png)
+![Manage Menu](https://gh-proxy.org/https://github.com/pdone/lite-cron/raw/main/assets/manage.png)
 
 #### Command Line Mode
 
