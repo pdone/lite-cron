@@ -6,7 +6,7 @@
 
 | 脚本名称 | 功能描述 | 必需环境变量 | 可选环境变量 |
 |---------|---------|-------------|-------------|
-| [ikuuu.py](#ikuuupy) | iKuuu 自动签到 | `IKUUU_COOKIE`（或 `IKUUU_EMAIL` + `IKUUU_PWD`） | `IKUUU_EMAIL`, `IKUUU_PWD` |
+| [ikuuu.py](#ikuuupy) | iKuuu 自动签到 | `IKUUU_COOKIE`（或 `IKUUU_EMAIL` + `IKUUU_PWD`） | `IKUUU_EMAIL`, `IKUUU_PWD`, `IKUUU_DOMAIN` |
 | [pttime.py](#pttimepy) | PTTime 站点自动签到 | `PTTIME_COOKIE`, `PTTIME_UID` | `PTTIME_PROXY` |
 | [smzdm.py](#smzdmpy) | 什么值得买自动签到 | `SMZDM_COOKIE` | - |
 | [tieba.py](#tiebapy) | 百度贴吧自动签到 | `TIEBA_COOKIE` | - |
@@ -34,6 +34,7 @@
 - `IKUUU_COOKIE`: 登录 Cookie（优先使用，格式: `key1=value1; key2=value2`）
 - `IKUUU_EMAIL`: 登录邮箱（Cookie 失效时回退使用）
 - `IKUUU_PWD`: 登录密码（Cookie 失效时回退使用）
+- `IKUUU_DOMAIN`: 站点域名（可选，未配置时使用脚本内置默认域名 `ikuuu.win`；官方域名变化时通过此变量覆盖）
 
 > 至少配置 `IKUUU_COOKIE`，或同时配置 `IKUUU_EMAIL` 和 `IKUUU_PWD`。
 
@@ -49,6 +50,7 @@ tasks:
       IKUUU_COOKIE: "your_cookie_here"          # 优先使用 Cookie 登录
       # IKUUU_EMAIL: "your_email@example.com"   # Cookie 失效时回退使用
       # IKUUU_PWD: "your_password"              # Cookie 失效时回退使用
+      # IKUUU_DOMAIN: "ikuuu.win"               # 可选，覆盖脚本内置域名
 ```
 
 ---

@@ -11,6 +11,7 @@ iKuuu 自动签到任务
 - IKUUU_COOKIE: 登录 Cookie（优先使用，格式: key1=value1; key2=value2）
 - IKUUU_EMAIL: 登录邮箱（Cookie 失效时回退使用）
 - IKUUU_PWD: 登录密码（Cookie 失效时回退使用）
+- IKUUU_DOMAIN: 站点域名（可选，未配置时使用脚本内置默认域名 ikuuu.win）
 """
 
 import os
@@ -26,16 +27,22 @@ import base64
 from datetime import datetime
 
 # 配置常量
-LOGIN_URL = "https://ikuuu.win/auth/login"
-CHECK_URL = "https://ikuuu.win/user/checkin"
-INFO_URL = "https://ikuuu.win/user"
+# 默认域名（ikuuu 官方域名经常变化，可通过环境变量 IKUUU_DOMAIN 覆盖）
+DEFAULT_DOMAIN = "ikuuu.win"
+
+# 从环境变量获取域名，未配置则使用默认域名
+DOMAIN = os.environ.get("IKUUU_DOMAIN") or DEFAULT_DOMAIN
+
+LOGIN_URL = f"https://{DOMAIN}/auth/login"
+CHECK_URL = f"https://{DOMAIN}/user/checkin"
+INFO_URL = f"https://{DOMAIN}/user"
 
 HEADERS = {
     "accept": "application/json, text/javascript, */*; q=0.01",
     "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
     "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "origin": "https://ikuuu.win",
-    "referer": "https://ikuuu.win/auth/login",
+    "origin": f"https://{DOMAIN}",
+    "referer": f"https://{DOMAIN}/auth/login",
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "x-requested-with": "XMLHttpRequest",
 }
@@ -306,7 +313,7 @@ def main() -> int:
     Returns:
         int: 退出码 (0=成功, 1=失败)
     """
-    log_info("iKuuu 签到任务开始")
+    log_info(f"iKuuu 签到任务开始 (域名: {DOMAIN})")
 
     cookies, emails, passwords = get_credentials()
 

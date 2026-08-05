@@ -3,3 +3,4 @@ compose.yml
 logs
 __pycache__
 .env
+.trae

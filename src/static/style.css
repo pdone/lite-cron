@@ -2062,13 +2062,21 @@ code
     }
     
     .header-content {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
         gap: var(--spacing-sm);
     }
-    
+
+    .logo {
+        min-width: 0;
+    }
+
     .logo h1 {
         font-size: 1.25rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     
     .logo-icon {

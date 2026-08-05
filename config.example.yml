@@ -19,6 +19,7 @@ tasks:
       IKUUU_COOKIE: "your_cookie_here"          # 优先使用 Cookie 登录
       # IKUUU_EMAIL: "your_email"                # Cookie 失效时回退使用
       # IKUUU_PWD: "your_password"               # Cookie 失效时回退使用
+      # IKUUU_DOMAIN: "ikuuu.win"                # 可选，覆盖脚本内置域名（官方域名经常变化时使用）
 
   - name: "PTTime"
     schedule: "0 3 * * *"
