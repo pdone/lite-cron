@@ -197,12 +197,15 @@ def main() -> int:
     # end_time_str = end_time.strftime('%Y-%m-%d %H:%M:%S')
     # duration = (end_time - start_time).total_seconds()
 
-    if "成功" in sign_result["value"] or "已签到" in sign_result["value"]:
+    if "成功" in sign_result["value"]:
         log_success("任务完成")
+        return 0
+    elif "已签到" in sign_result["value"]:
+        log_info("已签到，无需重复操作")
+        return 0
     else:
         log_warning("任务可能未成功")
-
-    return 0
+        return 1
 
 
 if __name__ == "__main__":
