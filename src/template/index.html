@@ -143,9 +143,9 @@
                     <div class="logs-content">
                         <div class="logs-toolbar">
                             <span class="logs-filename" id="current-filename">选择一个日志文件</span>
-                            <button class="btn btn-sm" id="btn-download" disabled>下载</button>
                         </div>
-                        <pre class="logs-viewer" id="logs-viewer"><code>点击左侧文件查看内容</code></pre>
+                        <div class="logs-filter-container" id="logs-filter-container"></div>
+                        <pre class="logs-viewer" id="logs-viewer"><div class="log-line" style="color: var(--text-muted); padding: 16px;">点击左侧文件查看内容</div></pre>
                     </div>
                 </div>
             </div>
@@ -284,7 +284,7 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='3') }}"></script>
     <script>
         lucide.createIcons();
     </script>

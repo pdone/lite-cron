@@ -940,6 +940,8 @@ def cmd_run_local(task_name: Optional[str] = None, run_all: bool = False, intera
         env = base_env.copy()
         for key, value in (task.get("env") or {}).items():
             env[str(key)] = str(value)
+        # 注入任务名，使 logger 输出的日志行携带 [TASK:xxx] 标签
+        env["LITECRON_TASK_NAME"] = name
 
         print_info(f"本地执行任务: {name} ({script})")
         try:

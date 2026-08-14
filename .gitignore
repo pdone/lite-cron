@@ -4,3 +4,5 @@ logs
 __pycache__
 .env
 .trae
+openspec
+.codebuddy

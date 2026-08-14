@@ -93,6 +93,9 @@ def main():
     # 从 .env 文件加载环境变量
     load_env_file()
 
+    # 设置任务名环境变量（供 logger.py 和脚本内日志使用）
+    os.environ["LITECRON_TASK_NAME"] = task_name
+
     # 判断执行来源
     exec_mode = os.environ.get("LITECRON_EXEC_MODE", "cron")
     if exec_mode == "webui":
@@ -122,6 +125,9 @@ def main():
     cmd = [sys.executable, script_path] + script_args
 
     # 使用 Popen 实时捕获输出，并同时输出到 stdout 和日志文件
+    # 传递 LITECRON_TASK_NAME 给子进程，使脚本内日志也能带任务名
+    child_env = os.environ.copy()
+    child_env["LITECRON_TASK_NAME"] = task_name
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -129,6 +135,7 @@ def main():
         text=True,
         bufsize=1,  # 行缓冲
         cwd=APP_DIR,
+        env=child_env,
     )
 
     # 实时读取并输出

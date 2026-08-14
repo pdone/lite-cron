@@ -8,8 +8,41 @@ const state = {
     containerStatus: null,
     isRunning: false,
     sortColumn: null,
-    sortDirection: 'asc'
+    sortDirection: 'asc',
+    currentLogFilename: null,
+    currentLogGroups: [],
+    currentLogFilter: 'all'
 };
+
+// 任务颜色池：为每个任务分配固定颜色
+const TASK_COLORS = [
+    { bg: 'rgba(99, 102, 241, 0.08)', border: '#6366f1', text: '#818cf8', badge: 'rgba(99, 102, 241, 0.15)' },
+    { bg: 'rgba(34, 197, 94, 0.08)', border: '#22c55e', text: '#4ade80', badge: 'rgba(34, 197, 94, 0.15)' },
+    { bg: 'rgba(245, 158, 11, 0.08)', border: '#f59e0b', text: '#fbbf24', badge: 'rgba(245, 158, 11, 0.15)' },
+    { bg: 'rgba(239, 68, 68, 0.08)', border: '#ef4444', text: '#f87171', badge: 'rgba(239, 68, 68, 0.15)' },
+    { bg: 'rgba(59, 130, 246, 0.08)', border: '#3b82f6', text: '#60a5fa', badge: 'rgba(59, 130, 246, 0.15)' },
+    { bg: 'rgba(139, 92, 246, 0.08)', border: '#8b5cf6', text: '#a78bfa', badge: 'rgba(139, 92, 246, 0.15)' },
+    { bg: 'rgba(236, 72, 153, 0.08)', border: '#ec4899', text: '#f472b6', badge: 'rgba(236, 72, 153, 0.15)' },
+    { bg: 'rgba(20, 184, 166, 0.08)', border: '#14b8a6', text: '#2dd4bf', badge: 'rgba(20, 184, 166, 0.15)' },
+    { bg: 'rgba(249, 115, 22, 0.08)', border: '#f97316', text: '#fb923c', badge: 'rgba(249, 115, 22, 0.15)' },
+    { bg: 'rgba(168, 85, 247, 0.08)', border: '#a855f7', text: '#c084fc', badge: 'rgba(168, 85, 247, 0.15)' }
+];
+
+// 任务名到颜色索引的缓存（保证同一任务始终同色）
+const taskColorMap = {};
+
+function getTaskColor(taskName) {
+    if (!taskName) return TASK_COLORS[0];
+    if (taskColorMap[taskName]) return TASK_COLORS[taskColorMap[taskName]];
+    // 使用 hash 确定分配颜色
+    let hash = 0;
+    for (let i = 0; i < taskName.length; i++) {
+        hash = ((hash << 5) - hash + taskName.charCodeAt(i)) | 0;
+    }
+    const idx = Math.abs(hash) % TASK_COLORS.length;
+    taskColorMap[taskName] = idx;
+    return TASK_COLORS[idx];
+}
 
 const elements = {
     taskList: document.getElementById('task-list'),
@@ -31,8 +64,8 @@ const elements = {
     confirmModalClose: document.getElementById('confirm-modal-close'),
     fileList: document.getElementById('file-list'),
     logsViewer: document.getElementById('logs-viewer'),
+    logsFilterContainer: document.getElementById('logs-filter-container') || document.createElement('div'),
     currentFilename: document.getElementById('current-filename'),
-    btnDownload: document.getElementById('btn-download'),
     runTaskName: document.getElementById('run-task-name'),
     runStatus: document.getElementById('run-status'),
     terminal: document.getElementById('terminal'),
@@ -114,6 +147,176 @@ function saveSortState() {
     }
 }
 
+// ==================== 日志分组与着色渲染 ====================
+
+function parseLogGroups(content) {
+    const lines = content.split('\n');
+    const groups = [];
+    let currentGroup = null;
+    const taskRegex = /\[TASK:([^\]]+)\]/;
+
+    for (const line of lines) {
+        const match = line.match(taskRegex);
+        let taskName = null;
+        if (match) {
+            taskName = match[1];
+        }
+        // 无 [TASK:] 标签的行统一归"系统"组（taskName 保持 null），不做旧格式回退解析
+
+        if (currentGroup && currentGroup.task === taskName) {
+            currentGroup.lines.push(line);
+        } else {
+            currentGroup = { task: taskName, lines: [line] };
+            groups.push(currentGroup);
+        }
+    }
+
+    return groups;
+}
+
+function buildLogFilter(groups) {
+    const tasks = new Set();
+    for (const g of groups) {
+        if (g.task) tasks.add(g.task);
+    }
+    return Array.from(tasks).sort();
+}
+
+function renderLogGroups(groups, filter) {
+    const container = document.createElement('div');
+    container.className = 'log-groups-container';
+
+    for (const group of groups) {
+        // 选中具体任务时仅显示该任务分组（系统日志 task 为 null，会被一并过滤）；选中"全部"时才显示系统日志
+        if (filter !== 'all' && group.task !== filter) continue;
+
+        const section = document.createElement('div');
+        section.className = 'log-group';
+
+        if (group.task) {
+            const color = getTaskColor(group.task);
+            section.style.borderLeftColor = color.border;
+            section.style.background = color.bg;
+
+            const header = document.createElement('div');
+            header.className = 'log-group-header';
+            header.style.background = color.badge;
+            header.style.color = color.text;
+            header.innerHTML = `<i data-lucide="chevron-down" class="log-group-chevron"></i><span class="log-group-task-name">${escapeHtml(group.task)}</span><span class="log-group-line-count">${group.lines.length} 行</span>`;
+            section.appendChild(header);
+        } else {
+            section.classList.add('log-group-system');
+            const header = document.createElement('div');
+            header.className = 'log-group-header';
+            header.innerHTML = `<i data-lucide="chevron-down" class="log-group-chevron"></i><span class="log-group-task-name">系统日志</span><span class="log-group-line-count">${group.lines.length} 行</span>`;
+            section.appendChild(header);
+        }
+
+        const body = document.createElement('div');
+        body.className = 'log-group-body';
+        for (const line of group.lines) {
+            const lineDiv = document.createElement('div');
+            lineDiv.className = 'log-line';
+            // 提取并高亮日志级别
+            const levelMatch = line.match(/\[(INF|ERR|WAR|DBG)\]/);
+            let escapedLine = escapeHtml(line);
+            if (levelMatch) {
+                const levelMap = { 'INF': 'info', 'ERR': 'error', 'WAR': 'warning', 'DBG': 'debug' };
+                escapedLine = escapedLine.replace(
+                    `[${levelMatch[1]}]`,
+                    `<span class="log-level log-level-${levelMap[levelMatch[1]]}">[${levelMatch[1]}]</span>`
+                );
+            }
+            // 高亮任务标签
+            if (group.task) {
+                escapedLine = escapedLine.replace(
+                    `[TASK:${escapeHtml(group.task)}]`,
+                    `<span class="log-task-tag" style="color:${getTaskColor(group.task).text}; background:${getTaskColor(group.task).badge}">[TASK:${escapeHtml(group.task)}]</span>`
+                );
+            }
+            lineDiv.innerHTML = escapedLine;
+            body.appendChild(lineDiv);
+        }
+        section.appendChild(body);
+
+        // 折叠/展开交互：点击标题栏切换同组 body 的 collapsed class 与箭头图标
+        const header = section.querySelector('.log-group-header');
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', () => {
+            const collapsed = body.classList.toggle('collapsed');
+            const chevron = header.querySelector('.log-group-chevron');
+            if (chevron) {
+                chevron.setAttribute('data-lucide', collapsed ? 'chevron-right' : 'chevron-down');
+                if (window.lucide) window.lucide.createIcons();
+            }
+        });
+
+        container.appendChild(section);
+    }
+
+    return container;
+}
+
+function renderTaskFilter(groups) {
+    const tasks = buildLogFilter(groups);
+    const container = document.createElement('div');
+    container.className = 'log-filter-bar';
+
+    const label = document.createElement('span');
+    label.className = 'log-filter-label';
+    label.textContent = '按任务筛选:';
+    container.appendChild(label);
+
+    const btnAll = document.createElement('button');
+    btnAll.className = 'log-filter-btn' + (state.currentLogFilter === 'all' ? ' active' : '');
+    btnAll.textContent = '全部';
+    btnAll.onclick = () => {
+        state.currentLogFilter = 'all';
+        refreshLogView();
+    };
+    container.appendChild(btnAll);
+
+    for (const task of tasks) {
+        const color = getTaskColor(task);
+        const isActive = state.currentLogFilter === task;
+        const btn = document.createElement('button');
+        btn.className = 'log-filter-btn' + (isActive ? ' active' : '');
+        btn.textContent = task;
+        // 选中时边框、字体颜色均使用任务分组颜色（同步覆盖默认紫色描边光晕），未选中使用默认配色
+        if (isActive) {
+            btn.style.borderColor = color.border;
+            btn.style.boxShadow = `0 0 0 1px ${color.border}`;
+            btn.style.color = color.text;
+        }
+        btn.onclick = () => {
+            state.currentLogFilter = task;
+            refreshLogView();
+        };
+        container.appendChild(btn);
+    }
+
+    return container;
+}
+
+function refreshLogView() {
+    if (!state.currentLogGroups.length) return;
+    const viewer = elements.logsViewer;
+    const filterContainer = elements.logsFilterContainer;
+
+    filterContainer.innerHTML = '';
+    const filterBar = renderTaskFilter(state.currentLogGroups);
+    filterContainer.appendChild(filterBar);
+
+    viewer.innerHTML = '';
+    const groupsContainer = renderLogGroups(state.currentLogGroups, state.currentLogFilter);
+    viewer.appendChild(groupsContainer);
+
+    // 初始化动态生成的 lucide 图标（折叠箭头等），确保首次渲染即显示
+    if (window.lucide) lucide.createIcons({ root: viewer });
+
+    viewer.scrollTop = viewer.scrollHeight;
+}
+
 function init() {
     loadSortState();
     bindEvents();
@@ -172,8 +375,6 @@ function bindEvents() {
             }
         });
     });
-    
-    elements.btnDownload.addEventListener('click', downloadLog);
     
     elements.confirmModalClose.addEventListener('click', () => closeModal('confirm'));
     elements.confirmCancel.addEventListener('click', () => closeModal('confirm'));
@@ -637,9 +838,11 @@ async function batchToggleTasks(enabled) {
 
 async function loadLogs() {
     elements.fileList.innerHTML = '<li class="file-item loading">加载中...</li>';
-    elements.logsViewer.innerHTML = '<code>点击左侧文件查看内容</code>';
+    elements.logsViewer.innerHTML = '<div class="log-line" style="color: var(--text-muted); padding: 16px;">点击左侧文件查看内容</div>';
+    elements.logsFilterContainer.innerHTML = '';
     elements.currentFilename.textContent = '选择一个日志文件';
-    elements.btnDownload.disabled = true;
+    state.currentLogGroups = [];
+    state.currentLogFilter = 'all';
     
     try {
         const response = await fetch('/api/logs');
@@ -676,47 +879,27 @@ async function viewLog(filename, index) {
     });
     
     elements.currentFilename.textContent = filename;
-    elements.logsViewer.innerHTML = '<code>加载中...</code>';
-    elements.btnDownload.disabled = false;
-    elements.btnDownload.dataset.filename = filename;
+    elements.logsViewer.innerHTML = '<div class="log-line" style="color: var(--text-muted); padding: 16px;">加载中...</div>';
+    elements.logsFilterContainer.innerHTML = '';
+    state.currentLogFilename = filename;
+    state.currentLogFilter = 'all';
     
     try {
         const response = await fetch(`/api/logs/${encodeURIComponent(filename)}?limit=1000`);
         const data = await response.json();
         
         if (data.error) {
-            elements.logsViewer.innerHTML = `<code class="error">${data.error}</code>`;
+            elements.logsViewer.innerHTML = `<div class="log-line" style="color: var(--accent-danger); padding: 16px;">${data.error}</div>`;
         } else {
-            const escaped = escapeHtml(data.content);
-            elements.logsViewer.innerHTML = `<code>${escaped}</code>`;
-            elements.logsViewer.scrollTop = elements.logsViewer.scrollHeight;
+            state.currentLogGroups = parseLogGroups(data.content);
+            refreshLogView();
         }
         
     } catch (error) {
         console.error('加载日志失败:', error);
-        elements.logsViewer.innerHTML = '<code class="error">加载失败</code>';
+        elements.logsViewer.innerHTML = '<div class="log-line" style="color: var(--accent-danger); padding: 16px;">加载失败</div>';
+        elements.logsFilterContainer.innerHTML = '';
     }
-}
-
-function downloadLog() {
-    const filename = elements.btnDownload.dataset.filename;
-    if (!filename) return;
-    
-    fetch(`/api/logs/${encodeURIComponent(filename)}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.content) {
-                const blob = new Blob([data.content], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
-        });
 }
 
 async function cleanLogs() {

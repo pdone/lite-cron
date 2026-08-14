@@ -1231,9 +1231,16 @@ body::before {
     color: var(--text-secondary);
 }
 
+.logs-filter-container {
+    flex-shrink: 0;
+    padding: 0 var(--spacing-md);
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+}
+
 .logs-viewer {
     flex: 1;
-    padding: var(--spacing-lg);
+    padding: 0;
     overflow: auto;
     font-family: var(--font-mono);
     font-size: 0.75rem;
@@ -1241,13 +1248,164 @@ body::before {
     color: var(--text-primary);
     background: var(--bg-input);
     margin: 0;
-    white-space: pre-wrap;
+    white-space: normal;
     word-break: break-all;
 }
 
-.logs-viewer code {
-    font-family: inherit;
-    color: inherit;
+/* ==================== 日志分组与着色 ==================== */
+
+.log-groups-container {
+    padding: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.log-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    flex-wrap: wrap;
+}
+
+.log-filter-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-right: var(--spacing-sm);
+}
+
+.log-filter-btn {
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+}
+
+.log-filter-btn:hover {
+    background: var(--bg-active);
+    color: var(--text-primary);
+}
+
+.log-filter-btn.active {
+    background: var(--bg-active);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary-light);
+    box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.log-group {
+    border-left: 3px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    overflow: hidden;
+}
+
+.log-group-system {
+    border-left-color: var(--text-muted) !important;
+    background: rgba(107, 111, 128, 0.05) !important;
+}
+
+.log-group-header {
+    display: flex;
+    align-items: center;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity var(--transition-fast);
+}
+
+.log-group-header:hover {
+    opacity: 0.85;
+}
+
+.log-group-chevron {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.log-group-task-name {
+    font-family: var(--font-mono);
+}
+
+.log-group-line-count {
+    font-size: 0.6875rem;
+    font-weight: 400;
+    opacity: 0.7;
+    font-family: var(--font-mono);
+    margin-left: auto;
+}
+
+.log-group-body {
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.log-group-body.collapsed {
+    display: none;
+}
+
+.log-line {
+    font-size: 0.75rem;
+    line-height: 1.7;
+    color: var(--text-primary);
+    word-break: break-all;
+    padding: 1px 0;
+    transition: background var(--transition-fast);
+}
+
+.log-line:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.log-level {
+    font-weight: 600;
+    padding: 0 3px;
+    border-radius: 2px;
+    font-size: 0.6875rem;
+}
+
+.log-level-info {
+    color: var(--accent-info-light);
+}
+
+.log-level-error {
+    color: var(--accent-danger-light);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.log-level-warning {
+    color: var(--accent-warning-light);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.log-level-debug {
+    color: var(--text-muted);
+}
+
+.log-task-tag {
+    font-weight: 500;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-size: 0.6875rem;
+    font-family: var(--font-mono);
 }
 
 .terminal {

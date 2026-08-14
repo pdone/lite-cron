@@ -42,15 +42,24 @@ def log(message: str, level: str = "INF") -> None:
     global LOG_FILE, LOG_DIR, _log_fallback_done
     
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-    formatted = f"{timestamp} [{level}] {message}"
     
+    # 读取当前任务名（由 task_wrapper 通过环境变量注入）
+    task_name = os.environ.get("LITECRON_TASK_NAME", "")
+    task_part = f" [TASK:{task_name}]" if task_name else ""
+
+    # 多行消息拆分为逐行输出：跳过纯空白行，保留非空续行原始内容（含缩进）。
+    # 每个物理行复用同一 timestamp/level/task_part，保证多行归属始终准确。
+    lines = [line for line in message.split('\n') if line.strip()]
+
     # 输出到控制台（flush=True 确保立即输出到 Docker logs）
-    print(formatted, flush=True)
+    for line in lines:
+        print(f"{timestamp} [{level}]{task_part} {line}", flush=True)
     
     # 输出到文件
     try:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
-            f.write(formatted + '\n')
+            for line in lines:
+                f.write(f"{timestamp} [{level}]{task_part} {line}\n")
     except Exception as e:
         if not _log_fallback_done:
             fallback_dir = os.path.join(os.getcwd(), 'logs')

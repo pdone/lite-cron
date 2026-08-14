@@ -797,6 +797,7 @@ def api_run_task(task_name: str):
 
             task_env = os.environ.copy()
             task_env["LITECRON_EXEC_MODE"] = "webui"
+            task_env["LITECRON_TASK_NAME"] = task_name
 
             if "env" in task:
                 for key, value in task["env"].items():
