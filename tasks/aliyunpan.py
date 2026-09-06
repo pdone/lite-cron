@@ -14,7 +14,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import (
+    log_info,
+    log_success,
+    log_error,
+    log_warning,
+    log_debug,
+    log_response_detail,
+)
 
 import requests
 from datetime import datetime
@@ -42,6 +49,7 @@ def get_refresh_token() -> str:
 
 def update_token(refresh_token: str) -> str:
     """使用 refresh token 获取 access token"""
+    response = None
     try:
         data = {"grant_type": "refresh_token", "refresh_token": refresh_token}
         response = requests.post(TOKEN_URL, json=data, headers=HEADERS, timeout=30)
@@ -55,14 +63,18 @@ def update_token(refresh_token: str) -> str:
         else:
             error_msg = result.get("message", "未知错误")
             log_error(f"Token 刷新失败: {error_msg}")
+            # 记录接口返回的完整内容，便于排查 refresh token 失效等原因
+            log_response_detail(response)
             return None
     except Exception as e:
         log_error(f"Token 刷新请求失败: {e}")
+        log_response_detail(response)
         return None
 
 
 def sign(access_token: str) -> list:
     """执行签到"""
+    response = None
     try:
         headers = HEADERS.copy()
         headers["Authorization"] = access_token
@@ -74,6 +86,8 @@ def sign(access_token: str) -> list:
 
         if "result" not in result:
             log_warning(f"响应异常: {result}")
+            # 记录接口返回的完整内容，便于排查签到异常
+            log_response_detail(response)
             return [{"name": "签到结果", "value": "接口响应异常"}]
 
         sign_result = result["result"]
@@ -121,6 +135,8 @@ def sign(access_token: str) -> list:
         return msg
 
     except Exception as e:
+        # 记录接口返回的完整内容，便于排查签到失败原因
+        log_response_detail(response)
         return [{"name": "签到结果", "value": f"签到失败: {e}"}]
 
 

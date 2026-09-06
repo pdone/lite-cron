@@ -14,7 +14,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import (
+    log_info,
+    log_success,
+    log_error,
+    log_warning,
+    log_debug,
+    log_response_detail,
+)
 
 import random
 import hashlib
@@ -78,12 +85,14 @@ def request_with_retry(
     retry: int = 3,
 ) -> dict:
     """带重试的请求"""
+    last_response = None
     for i in range(retry):
         try:
             if method.lower() == "get":
                 response = session.get(url, timeout=10)
             else:
                 response = session.post(url, data=data, timeout=10)
+            last_response = response
 
             response.raise_for_status()
             if not response.text.strip():
@@ -92,6 +101,8 @@ def request_with_retry(
             return response.json()
         except Exception as e:
             if i == retry - 1:
+                # 记录最后一次站点返回的完整内容，便于排查签名失败/风控/空响应
+                log_response_detail(last_response)
                 raise Exception(f"请求失败: {e}")
 
             wait_time = 1.5 * (2**i) + random.uniform(0, 1)

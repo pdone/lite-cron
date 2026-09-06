@@ -989,6 +989,10 @@ def api_log_content(filename: str):
             content = f.read()
         lines = content.split("\n")
 
+        # 去除因文件末尾换行符产生的空字符串元素，避免日志页面出现空白行/空白分组
+        while lines and not lines[-1].strip():
+            lines.pop()
+
         limit = request.args.get("limit", type=int)
         if limit and len(lines) > limit:
             lines = lines[-limit:]
@@ -1135,6 +1139,23 @@ def api_clean():
                     if stat.st_mtime < seven_days_ago:
                         log_file.unlink()
                         cleaned_count += 1
+                except Exception:
+                    pass
+
+        # 清理任务失败时落盘的响应原文（logs/responses/<日期>/），并移除空目录
+        responses_dir = LOGS_DIR / "responses"
+        if responses_dir.exists():
+            for dump_file in responses_dir.rglob("*"):
+                try:
+                    if dump_file.is_file() and dump_file.stat().st_mtime < seven_days_ago:
+                        dump_file.unlink()
+                        cleaned_count += 1
+                except Exception:
+                    pass
+            for sub_dir in sorted(responses_dir.glob("*"), reverse=True):
+                try:
+                    if sub_dir.is_dir() and not any(sub_dir.iterdir()):
+                        sub_dir.rmdir()
                 except Exception:
                     pass
 

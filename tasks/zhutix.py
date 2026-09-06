@@ -25,7 +25,14 @@ from typing import Optional
 from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import (
+    log_info,
+    log_success,
+    log_error,
+    log_warning,
+    log_debug,
+    log_response_detail,
+)
 
 BASE_URL = "https://zhutix.com"
 MISSION_URL = f"{BASE_URL}/mission/"
@@ -214,22 +221,26 @@ def get_user_mission(cookie: str, proxy: Optional[str] = None) -> Optional[dict]
 
         if response.status_code != 200:
             log_error(f"获取签到状态失败，服务器返回状态码: {response.status_code}")
-            log_debug(f"响应内容: {response.text[:500]}")
+            # 记录接口返回的完整内容，便于排查 403/风控/登录失效等问题
+            log_response_detail(response)
             return None
 
         try:
             res_data = response.json()
         except ValueError:
             log_warning(f"签到状态响应非 JSON 格式: {response.text[:200]}")
+            log_response_detail(response)
             return None
 
         if not isinstance(res_data, dict):
             log_warning(f"签到状态响应格式异常: {response.text[:200]}")
+            log_response_detail(response)
             return None
 
         mission = res_data.get("mission")
         if not isinstance(mission, dict):
             log_warning("签到状态响应中缺少 mission 字段")
+            log_response_detail(response)
             return None
 
         return mission
@@ -292,13 +303,15 @@ def sign(cookie: str, proxy: Optional[str] = None) -> bool:
 
         if response.status_code != 200:
             log_error(f"签到失败，服务器返回状态码: {response.status_code}")
-            log_debug(f"响应内容: {response.text[:500]}")
+            # 记录接口返回的完整内容，便于排查 403/风控/登录失效等问题
+            log_response_detail(response)
             return False
 
         try:
             res_data = response.json()
         except ValueError:
             log_warning(f"签到响应非 JSON 格式: {response.text[:200]}")
+            log_response_detail(response)
             return False
 
         # 兼容两种响应格式：
@@ -317,6 +330,7 @@ def sign(cookie: str, proxy: Optional[str] = None) -> bool:
             return True
 
         log_warning(f"签到未获得锋币，可能今日已签到或失败: {res_data}")
+        log_response_detail(response)
         return False
 
     except ImportError:

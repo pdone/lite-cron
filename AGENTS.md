@@ -111,7 +111,7 @@ import sys
 
 # Import project logger (REQUIRED - don't use standard logging)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import log_info, log_success, log_error, log_warning, log_debug, log_response_detail
 
 # Read env vars
 MY_VAR = os.environ.get("MY_VAR")
@@ -148,6 +148,10 @@ if __name__ == "__main__":
 3. **Env var access**: Use `os.environ.get("KEY")` - vars are set by task_wrapper
 4. **Script location**: Place in `tasks/` directory
 5. **Path references**: Script runs in `/app/` context inside container
+6. **失败必须记录站点返回原文**: 请求失败、解析失败或接口返回异常时调用
+   `log_response_detail(response)`。响应完整原文落盘到 `logs/responses/<日期>/`；
+   主日志只输出状态码、URL、响应长度、落盘路径与摘要（短响应内联全文，长响应记片段），
+   避免大段 HTML 冲垮 WebUI 日志视图
 
 ### Adding New Tasks
 

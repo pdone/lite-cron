@@ -14,7 +14,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import (
+    log_info,
+    log_success,
+    log_error,
+    log_warning,
+    log_debug,
+    log_response_detail,
+)
 
 import re
 import hashlib
@@ -64,6 +71,7 @@ def robot_token(cookie: str) -> str:
         .upper(),
     }
 
+    resp = None
     try:
         resp = requests.post(url=TOKEN_URL, headers=headers, data=data, timeout=30)
         resp.raise_for_status()
@@ -71,6 +79,8 @@ def robot_token(cookie: str) -> str:
         return result["data"]["token"]
     except Exception as e:
         log_warning(f"获取 token 失败: {e}")
+        # 记录接口返回的完整内容，便于排查签名失效/风控等原因
+        log_response_detail(resp)
         return None
 
 
@@ -100,6 +110,7 @@ def sign(cookie: str, token: str) -> tuple:
         .upper(),
     }
 
+    resp = None
     try:
         resp = requests.post(url=CHECKIN_URL, headers=headers, data=data, timeout=30)
         resp.raise_for_status()
@@ -110,6 +121,8 @@ def sign(cookie: str, token: str) -> tuple:
             data,
         )
     except Exception as e:
+        # 记录接口返回的完整内容，便于排查签到失败原因
+        log_response_detail(resp)
         return -1, f"签到请求失败: {e}", None
 
 
@@ -118,6 +131,7 @@ def get_all_reward(cookie: str, data: dict) -> list:
     headers = HEADERS.copy()
     headers["Cookie"] = cookie
 
+    resp = None
     try:
         resp = requests.post(
             url=f"{BASE_URL}/checkin/all_reward", headers=headers, data=data, timeout=30
@@ -126,6 +140,7 @@ def get_all_reward(cookie: str, data: dict) -> list:
         result = resp.json()
     except Exception as e:
         log_warning(f"获取奖励信息失败: {e}")
+        log_response_detail(resp)
         return []
 
     normal_reward = (result.get("data") or {}).get("normal_reward") or {}
@@ -157,6 +172,7 @@ def get_user_info(cookie: str) -> dict:
         "Referer": "https://m.smzdm.com/",
     }
 
+    resp = None
     try:
         resp = requests.get(url=USER_URL, headers=headers, timeout=30)
         resp.raise_for_status()
@@ -190,6 +206,7 @@ def get_user_info(cookie: str) -> dict:
         }
     except Exception as e:
         log_warning(f"获取用户信息失败: {e}")
+        log_response_detail(resp)
         return {"name": "未知用户", "level": "未知", "gold": "0", "silver": "0"}
 
 

@@ -22,7 +22,14 @@ import sys
 from typing import Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import (
+    log_info,
+    log_success,
+    log_error,
+    log_warning,
+    log_debug,
+    log_response_detail,
+)
 
 from urllib.parse import urlparse
 
@@ -148,6 +155,8 @@ def sign(cookie: str, random_mode: str, proxy: Optional[str] = None) -> bool:
             log_info(f"响应 JSON: {res_data}")
         except Exception:
             log_warning(f"⚠️ 响应非 JSON 格式: {response.text[:200]}")
+            # 记录站点返回的完整内容，便于排查风控页/错误页
+            log_response_detail(response)
 
         # 处理已签到的情况（状态码 500 但 message 包含已签到关键词）
         if res_data and is_already_signed(res_data.get("message", "")):
@@ -164,11 +173,13 @@ def sign(cookie: str, random_mode: str, proxy: Optional[str] = None) -> bool:
             else:
                 message = res_data.get("message", "")
                 log_warning(f"⚠️ 签到未成功: {message}")
+                log_response_detail(response)
                 return False
 
         # 其他错误
         message = res_data.get("message", "") if res_data else response.text[:200]
         log_error(f"❌ 签到失败，状态码: {status_code}, 响应: {message}")
+        log_response_detail(response)
         return False
 
     except ImportError:

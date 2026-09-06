@@ -675,6 +675,11 @@ def cmd_clean() -> int:
             ["find", str(logs_dir), "-type", "f", "-name", "*.log", "-mtime", "+7", "-delete"],
             capture_output=True
         )
+        # 清理任务失败时落盘的响应原文（logs/responses/<日期>/）
+        run_command(
+            ["find", str(logs_dir / "responses"), "-type", "f", "-mtime", "+7", "-delete"],
+            capture_output=True
+        )
         print_success("已清理超过 7 天的日志文件")
     
     # 清理容器内的日志
@@ -682,6 +687,10 @@ def cmd_clean() -> int:
         run_command([
             "docker", "exec", CONTAINER_NAME, "sh", "-c",
             "find /app/logs -type f -name '*.log' -mtime +7 -delete 2>/dev/null || true"
+        ], capture_output=True)
+        run_command([
+            "docker", "exec", CONTAINER_NAME, "sh", "-c",
+            "find /app/logs/responses -type f -mtime +7 -delete 2>/dev/null || true"
         ], capture_output=True)
         print_success("已清理容器内的旧日志")
     

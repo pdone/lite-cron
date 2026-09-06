@@ -20,7 +20,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import (
+    log_info,
+    log_success,
+    log_error,
+    log_warning,
+    log_debug,
+    log_response_detail,
+)
 
 import re
 from datetime import datetime
@@ -57,6 +64,8 @@ class V2ex:
         """
         self.check_item = check_item
         self.session = None
+        # 最近一次响应对象，供异常分支记录站点返回的完整内容
+        self.last_response = None
 
     def _init_session(self):
         """初始化请求会话（使用 curl_cffi 模拟 Chrome 浏览器）
@@ -177,6 +186,7 @@ class V2ex:
             # 访问签到页面
             log_info("访问签到页面...")
             response = self.session.get(url=DAILY_URL, verify=ssl_verify, timeout=20)
+            self.last_response = response
             response.raise_for_status()
 
             # 优先检测是否已签到（无论按钮是否存在，只要页面含已签到标记就跳过）
@@ -188,6 +198,8 @@ class V2ex:
                 once_url = self._parse_once_token(response.text)
                 if once_url is None:
                     log_warning("无法获取签到链接，Cookie 可能已过期")
+                    # 记录站点返回的完整内容，便于排查 Cookie 失效/页面改版
+                    log_response_detail(response)
                     msg.append({"name": "签到状态", "value": "Cookie 可能已过期"})
                     return msg
                 already_signed = False
@@ -204,12 +216,14 @@ class V2ex:
                     params={"once": once_token},
                     timeout=20,
                 )
+                self.last_response = sign_response
                 sign_response.raise_for_status()
                 log_success("签到请求已发送")
 
             # 获取用户信息
             log_info("获取用户信息...")
             balance_response = self.session.get(url=BALANCE_URL, verify=ssl_verify, timeout=20)
+            self.last_response = balance_response
             balance_response.raise_for_status()
             user_info = self._parse_user_info(balance_response.text)
 
@@ -224,6 +238,8 @@ class V2ex:
         except Exception as e:
             err_str = str(e)
             log_error(f"签到异常: {err_str}")
+            # 记录最近一次站点返回的完整内容，便于排查失败原因
+            log_response_detail(self.last_response)
             if "proxy" in err_str.lower() or "connect" in err_str.lower():
                 msg.append({"name": "签到状态", "value": f"代理错误: {err_str}"})
             elif "timeout" in err_str.lower() or "timed out" in err_str.lower():

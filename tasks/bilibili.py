@@ -46,7 +46,14 @@ import requests
 from urllib.parse import urlencode
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import (
+    log_info,
+    log_success,
+    log_error,
+    log_warning,
+    log_debug,
+    log_response_detail,
+)
 
 
 # ============ 常量 ============
@@ -130,13 +137,36 @@ def make_headers(sessdata: str, bili_jct: str, referer: str = "https://www.bilib
 
 # ============ HTTP 工具 ============
 
+def _parse_json(resp) -> dict:
+    """解析响应 JSON；解析失败时记录接口返回的完整内容，便于排查风控页/错误页
+
+    Args:
+        resp: requests 响应对象
+
+    Returns:
+        dict: 解析后的字典；解析失败时返回 {"code": -1, "message": ...}
+    """
+    text = getattr(resp, "text", "") or ""
+    try:
+        data = resp.json()
+    except ValueError:
+        log_response_detail(resp)
+        return {"code": -1, "message": f"响应非 JSON: {text[:200]}"}
+
+    if not isinstance(data, dict):
+        log_response_detail(resp)
+        return {"code": -1, "message": f"响应格式异常: {text[:200]}"}
+    return data
+
+
 def http_get(url: str, headers: dict, timeout: int = 15) -> dict:
     """GET 请求，返回解析后的 JSON dict，异常时返回 {"code": -1, "message": ...}"""
     try:
         resp = requests.get(url=url, headers=headers, timeout=timeout, proxies=PROXIES)
-        return resp.json()
+        return _parse_json(resp)
     except requests.exceptions.HTTPError as e:
-        return {"code": -1, "message": f"HTTP {e.response.status_code}"}
+        log_response_detail(e.response)
+        return {"code": -1, "message": f"HTTP {e.response.status_code if e.response is not None else 'N/A'}"}
     except Exception as e:
         return {"code": -1, "message": str(e)}
 
@@ -146,9 +176,10 @@ def http_post(url: str, data: dict, headers: dict, timeout: int = 15) -> dict:
     headers = {**headers, "Content-Type": "application/x-www-form-urlencoded"}
     try:
         resp = requests.post(url=url, data=data, headers=headers, timeout=timeout, proxies=PROXIES)
-        return resp.json()
+        return _parse_json(resp)
     except requests.exceptions.HTTPError as e:
-        return {"code": -1, "message": f"HTTP {e.response.status_code}"}
+        log_response_detail(e.response)
+        return {"code": -1, "message": f"HTTP {e.response.status_code if e.response is not None else 'N/A'}"}
     except Exception as e:
         return {"code": -1, "message": str(e)}
 
@@ -173,6 +204,8 @@ def get_user_info(sessdata: str, bili_jct: str) -> dict:
     headers = make_headers(sessdata, bili_jct)
     resp = http_get(url, headers)
     if not resp or resp.get("code") != 0:
+        # 记录接口完整返回（含 code/message），便于排查 Cookie 失效、风控拦截等
+        log_warning(f"获取用户信息失败，接口完整返回: {resp}")
         return {"is_login": False}
     data = resp.get("data") or {}
     level_info = data.get("level_info") or {}
@@ -470,7 +503,11 @@ def do_watch(
     resp = http_post(url, data, headers)
     if resp and resp.get("code") == 0:
         return {"success": True, "exp": 5, "video": video["title"]}
-    return {"success": False, "message": resp.get("message", "未知错误") if resp else "请求失败"}
+    return {
+        "success": False,
+        "message": resp.get("message", "未知错误") if resp else "请求失败",
+        "raw": resp,
+    }
 
 
 def do_share(sessdata: str, bili_jct: str) -> dict:
@@ -503,8 +540,9 @@ def do_share(sessdata: str, bili_jct: str) -> dict:
         return {
             "success": False,
             "message": f"{msg}（建议在 BILIBILI_COOKIE 中补充 buvid3/buvid4 字段，或设置 BILIBILI_SKIP_SHARE=true 跳过）",
+            "raw": resp,
         }
-    return {"success": False, "message": msg}
+    return {"success": False, "message": msg, "raw": resp}
 
 
 def do_coin(
@@ -543,7 +581,9 @@ def do_coin(
         else:
             msg = resp.get("message", "未知错误") if resp else "请求失败"
             code = resp.get("code") if resp else -1
-            results.append({"index": i + 1, "success": False, "message": msg, "code": code})
+            results.append(
+                {"index": i + 1, "success": False, "message": msg, "code": code, "raw": resp}
+            )
             # 34005: 达到上限；-104: 硬币不足；-111: CSRF 失效
             if code in (34005, -104, -111):
                 break
@@ -697,7 +737,8 @@ def run_all(config: dict) -> dict:
             total_exp += r["exp"]
             log_success(f"观看任务完成: +{r['exp']} EXP 《{r.get('video', '')}》")
         else:
-            log_warning(f"观看任务失败: {r.get('message')}")
+            # 附接口完整返回，便于排查风控/CSRF 失效等问题
+            log_warning(f"观看任务失败: {r.get('message')} | 接口完整返回: {r.get('raw')}")
         tasks.append({"task": "watch", **r})
         time.sleep(random.uniform(1.0, 2.0))
 
@@ -715,7 +756,7 @@ def run_all(config: dict) -> dict:
             total_exp += r.get("exp", 0)
             log_success(f"分享任务完成: +{r.get('exp', 0)} EXP 《{r.get('video', '')}》")
         else:
-            log_warning(f"分享任务失败: {r.get('message')}")
+            log_warning(f"分享任务失败: {r.get('message')} | 接口完整返回: {r.get('raw')}")
         tasks.append({"task": "share", **r})
         time.sleep(random.uniform(1.0, 2.0))
 
@@ -745,7 +786,10 @@ def run_all(config: dict) -> dict:
                     log_warning(f"投币任务部分失败: {r['count']}/{r['target']} 枚成功，+{r['exp']} EXP")
                 else:
                     last = r["details"][-1] if r["details"] else {}
-                    log_warning(f"投币任务失败: {last.get('message', '未知错误')}")
+                    log_warning(
+                        f"投币任务失败: {last.get('message', '未知错误')}"
+                        f" | 接口完整返回: {last.get('raw')}"
+                    )
             tasks.append({"task": "coin", **r})
 
     # 7. 大会员权益（可选）
@@ -763,7 +807,9 @@ def run_all(config: dict) -> dict:
                         received += 1
                         log_success(f"领取权益成功: 类型 {type_id}")
                     else:
-                        log_warning(f"领取权益失败: {r.get('message', '未知错误')}")
+                        log_warning(
+                            f"领取权益失败: {r.get('message', '未知错误')} | 接口完整返回: {r}"
+                        )
             tasks.append({"task": "vip_privilege", "success": True, "received": received})
         else:
             log_info("非大会员，跳过权益领取")
@@ -776,7 +822,7 @@ def run_all(config: dict) -> dict:
         if r.get("code") == 0:
             log_success(f"兑换成功: {r.get('message', '')}")
         else:
-            log_warning(f"兑换失败: {r.get('message', '未知错误')}")
+            log_warning(f"兑换失败: {r.get('message', '未知错误')} | 接口完整返回: {r}")
         tasks.append({"task": "silver2coin", **r})
 
     # 9. 汇总状态

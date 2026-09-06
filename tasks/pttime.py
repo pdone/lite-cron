@@ -17,7 +17,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import log_info, log_success, log_error, log_warning, log_debug, log_response_detail
 
 import re
 import requests
@@ -164,6 +164,8 @@ def sign(cookie: str, uid: str, proxies: dict = None) -> bool:
             return True
         else:
             log_warning("未能解析签到结果，可能已签到或页面结构变更")
+            # 记录页面返回详情，便于排查解析失败原因
+            log_response_detail(response)
             # 尝试检测已签到提示
             if "已经签到" in html or "今日已签" in html:
                 log_info("今日已签到")
@@ -177,7 +179,10 @@ def sign(cookie: str, uid: str, proxies: dict = None) -> bool:
         log_error("请求超时")
         return False
     except requests.exceptions.RequestException as e:
-        log_error(f"请求失败: {e}")
+        status = e.response.status_code if e.response is not None else "N/A"
+        log_error(f"请求失败: {e} | HTTP {status}")
+        # 记录站点返回的完整内容（原文落盘），便于排查风控页/登录跳转等问题
+        log_response_detail(e.response)
         return False
     except Exception as e:
         log_error(f"未知错误: {e}")

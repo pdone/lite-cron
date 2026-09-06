@@ -14,7 +14,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import (
+    log_info,
+    log_success,
+    log_error,
+    log_warning,
+    log_debug,
+    log_response_detail,
+)
 
 import re
 import requests
@@ -43,6 +50,7 @@ def get_cookie() -> str:
 
 def get_sign_param(session: requests.Session) -> str:
     """GET 签到页面并提取 sign 参数"""
+    response = None
     try:
         response = session.get(SIGN_URL, timeout=15)
         response.raise_for_status()
@@ -64,10 +72,13 @@ def get_sign_param(session: requests.Session) -> str:
         elif match_signed:
             return match_signed.group(1)
 
+        # 未匹配到签到按钮：记录页面完整内容，便于排查 Cookie 失效/页面改版
+        log_response_detail(response)
         return None
 
     except Exception as e:
         log_error(f"获取 sign 参数失败: {e}")
+        log_response_detail(response)
         return None
 
 
@@ -76,6 +87,7 @@ def do_sign(session: requests.Session, sign_param: str) -> dict:
     if not sign_param:
         return {"name": "签到结果", "value": "签到失败，未能成功获取 sign 参数"}
 
+    response = None
     try:
         response = session.get(f"{SIGN_URL}&sign={sign_param}", timeout=15)
         response.raise_for_status()
@@ -86,15 +98,19 @@ def do_sign(session: requests.Session, sign_param: str) -> dict:
         elif re.search(r"您今天已经打过卡了，请勿重复操作！", html):
             return {"name": "签到结果", "value": "ℹ️ 您已签到，请勿重复签到"}
         else:
+            # 未匹配到任何已知结果：记录页面完整内容，便于排查签到失败原因
+            log_response_detail(response)
             return {"name": "签到结果", "value": "⚠️ 未知签到异常"}
 
     except Exception as e:
+        log_response_detail(response)
         return {"name": "签到结果", "value": f"❌ 签到异常: {e}"}
 
 
 def get_sign_info(session: requests.Session) -> list:
     """获取打卡动态信息"""
     msg = []
+    response = None
 
     try:
         response = session.get(SIGN_URL, timeout=15)
@@ -145,6 +161,8 @@ def get_sign_info(session: requests.Session) -> list:
             )
 
     except Exception as e:
+        # 记录页面完整内容，便于排查打卡动态解析失败原因
+        log_response_detail(response)
         msg.append(
             {
                 "name": "获取打卡动态失败",
@@ -179,7 +197,9 @@ def main() -> int:
     if sign_param:
         log_success("获取到 sign 参数")
     else:
-        log_warning("未能获取 sign 参数（可能已签到或页面变更）")
+        # 未获取到 sign 参数即视为失败，无需继续执行后续流程
+        log_warning("未能获取 sign 参数（可能 Cookie 失效或页面变更），任务终止")
+        return 1
 
     # 执行签到
     log_info("执行签到...")

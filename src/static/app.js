@@ -14,34 +14,34 @@ const state = {
     currentLogFilter: 'all'
 };
 
-// 任务颜色池：为每个任务分配固定颜色
-const TASK_COLORS = [
-    { bg: 'rgba(99, 102, 241, 0.08)', border: '#6366f1', text: '#818cf8', badge: 'rgba(99, 102, 241, 0.15)' },
-    { bg: 'rgba(34, 197, 94, 0.08)', border: '#22c55e', text: '#4ade80', badge: 'rgba(34, 197, 94, 0.15)' },
-    { bg: 'rgba(245, 158, 11, 0.08)', border: '#f59e0b', text: '#fbbf24', badge: 'rgba(245, 158, 11, 0.15)' },
-    { bg: 'rgba(239, 68, 68, 0.08)', border: '#ef4444', text: '#f87171', badge: 'rgba(239, 68, 68, 0.15)' },
-    { bg: 'rgba(59, 130, 246, 0.08)', border: '#3b82f6', text: '#60a5fa', badge: 'rgba(59, 130, 246, 0.15)' },
-    { bg: 'rgba(139, 92, 246, 0.08)', border: '#8b5cf6', text: '#a78bfa', badge: 'rgba(139, 92, 246, 0.15)' },
-    { bg: 'rgba(236, 72, 153, 0.08)', border: '#ec4899', text: '#f472b6', badge: 'rgba(236, 72, 153, 0.15)' },
-    { bg: 'rgba(20, 184, 166, 0.08)', border: '#14b8a6', text: '#2dd4bf', badge: 'rgba(20, 184, 166, 0.15)' },
-    { bg: 'rgba(249, 115, 22, 0.08)', border: '#f97316', text: '#fb923c', badge: 'rgba(249, 115, 22, 0.15)' },
-    { bg: 'rgba(168, 85, 247, 0.08)', border: '#a855f7', text: '#c084fc', badge: 'rgba(168, 85, 247, 0.15)' }
-];
+// 任务颜色：基于任务名 hash + 黄金角(137.508°)色相分布，动态生成任意数量的高区分度颜色
+// —— 取代固定颜色池，任务数再多也不易撞色，且同一任务名始终同色
+function hashString(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+        h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(h);
+}
 
-// 任务名到颜色索引的缓存（保证同一任务始终同色）
+const GOLDEN_ANGLE = 137.508;
+
+function makeTaskColor(name) {
+    const hue = (hashString(name || 'task') * GOLDEN_ANGLE) % 360;
+    return {
+        bg:     `hsla(${hue}, 70%, 55%, 0.10)`,
+        border: `hsl(${hue}, 70%, 55%)`,
+        text:   `hsl(${hue}, 85%, 68%)`,
+        badge:  `hsla(${hue}, 70%, 55%, 0.18)`
+    };
+}
+
+// 任务名到颜色的缓存（保证同一任务始终同色）
 const taskColorMap = {};
 
 function getTaskColor(taskName) {
-    if (!taskName) return TASK_COLORS[0];
-    if (taskColorMap[taskName]) return TASK_COLORS[taskColorMap[taskName]];
-    // 使用 hash 确定分配颜色
-    let hash = 0;
-    for (let i = 0; i < taskName.length; i++) {
-        hash = ((hash << 5) - hash + taskName.charCodeAt(i)) | 0;
-    }
-    const idx = Math.abs(hash) % TASK_COLORS.length;
-    taskColorMap[taskName] = idx;
-    return TASK_COLORS[idx];
+    if (!taskColorMap[taskName]) taskColorMap[taskName] = makeTaskColor(taskName);
+    return taskColorMap[taskName];
 }
 
 const elements = {
@@ -175,11 +175,16 @@ function parseLogGroups(content) {
 }
 
 function buildLogFilter(groups) {
-    const tasks = new Set();
+    const tasks = [];
+    const seen = new Set();
+    // 按日志分组出现的顺序去重，保持首次出现顺序
     for (const g of groups) {
-        if (g.task) tasks.add(g.task);
+        if (g.task && !seen.has(g.task)) {
+            seen.add(g.task);
+            tasks.push(g.task);
+        }
     }
-    return Array.from(tasks).sort();
+    return tasks;
 }
 
 function renderLogGroups(groups, filter) {

@@ -18,7 +18,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from logger import log_info, log_success, log_error, log_warning, log_debug
+from logger import (
+    log_info,
+    log_success,
+    log_error,
+    log_warning,
+    log_debug,
+    log_response_detail,
+)
 
 import json
 import re
@@ -165,9 +172,11 @@ def login(session: requests.Session, email: str, password: str) -> bool:
 
     except requests.exceptions.RequestException as e:
         log_error(f"登录请求失败: {e}")
+        log_response_detail(getattr(e, "response", None))
         return False
     except json.JSONDecodeError as e:
         log_error(f"登录响应解析失败: {e}")
+        log_response_detail(response)
         return False
 
 
@@ -198,10 +207,12 @@ def checkin(session: requests.Session) -> str:
     except requests.exceptions.RequestException as e:
         error_msg = f"签到请求失败: {e}"
         log_error(f"{error_msg}")
+        log_response_detail(getattr(e, "response", None))
         raise requests.exceptions.RequestException(error_msg)
     except json.JSONDecodeError as e:
         error_msg = f"签到响应解析失败: {e}"
         log_error(f"{error_msg}")
+        log_response_detail(response)
         raise json.JSONDecodeError(error_msg, e.doc, e.pos)
 
 
@@ -243,13 +254,16 @@ def get_traffic_info(session: requests.Session) -> str:
             else:
                 # 如果格式有微调，可以尝试更宽泛的匹配
                 log_warning("未能解析流量信息")
+                log_response_detail(response)
         else:
             log_warning("未能解析流量信息")
+            log_response_detail(response)
             return "流量信息获取失败"
 
     except requests.exceptions.RequestException as e:
         error_msg = f"流量信息获取失败: {e}"
         log_error(f"{error_msg}")
+        log_response_detail(getattr(e, "response", None))
         return error_msg
     except re.error as e:
         error_msg = f"正则解析错误: {e}"
