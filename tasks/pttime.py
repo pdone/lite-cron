@@ -124,52 +124,85 @@ def sign(cookie: str, uid: str, proxies: dict = None) -> bool:
 
         html = response.text
 
-        # 解析签到结果（参考原 JS 正则）
+        # 解析签到结果（兼容页面改版前后的结构）
         # 总签到天数
         total_sign_match = re.search(r"总签到：(\d+)天", html)
-        # 魔力值
-        magic_match = re.search(r"\]: (\d+\.?\d*)\[", html)
-        # 详细签到信息
+        # 总魔力值：兼容半角/全角冒号，页面形如 ]：127572.0[ 或 ]: 127572.0[
+        magic_match = re.search(r"\]\s*[：:]\s*(\d+\.?\d*)\[", html)
+        # 旧版详细签到信息（部分历史页面可能仍返回）
         detail_match = re.search(
             r"这是你的第 <b>(\d+)</b> 次签到，已连续签到 <b>(\d+)</b> 天，本次签到获得 <b>(\d+)</b> 个魔力值。",
             html,
         )
+        # 新版「7天签到记录」最新一条：时间 / 获得魔力值 / 连续天数
+        latest_record_match = re.search(
+            r"时间：([\d\-]+\s[\d:]+)</span>.*?获得魔力值：<b>(\d+)</b></span>.*?连续天数：<b>(\d+)</b>天",
+            html,
+            re.DOTALL,
+        )
+        # 新版「前30天签到记录」最新一条连续天数（备选）
+        first30_match = re.search(
+            r"连续天数：(\d+)</span><span[^>]*>签到日：(\d+)</span>", html
+        )
+        # 已签到提示：兼容「今天已签到」「今日已签到」「请勿重复刷新」等文案
+        already_signed = (
+            "今天已签到" in html
+            or "今日已签到" in html
+            or "已经签到" in html
+            or "请勿重复刷新" in html
+        )
 
-        if total_sign_match and magic_match:
+        # 成功判定：能解析到总签到天数，且具备 魔力值 / 已签到提示 / 签到记录 任一佐证
+        if total_sign_match and (
+            magic_match or already_signed or latest_record_match or first30_match
+        ):
             total_sign = total_sign_match.group(1)
-            total_magic = magic_match.group(1)
+            total_magic = magic_match.group(1) if magic_match else "未知"
 
+            consec = None
+            earned = None
+            if latest_record_match:
+                earned = latest_record_match.group(2)
+                consec = latest_record_match.group(3)
+            if consec is None and first30_match:
+                consec = first30_match.group(1)
+
+            # 旧版详情优先（含本次获得魔力值，可直接累加）
             if detail_match:
                 total_count = detail_match.group(1)
                 consecutive = detail_match.group(2)
                 earned = detail_match.group(3)
-                final_magic = float(total_magic) + int(earned)
-
+                final_magic = float(total_magic) + int(earned) if magic_match else total_magic
                 sign_msg = (
                     f"签到成功！\n"
                     f"  总签到: {total_count} 天\n"
                     f"  连续签到: {consecutive} 天\n"
                     f"  本次获得: {earned} 魔力值\n"
-                    f"  总魔力值: {final_magic:.1f}"
+                    f"  总魔力值: {final_magic}"
                 )
-                log_success(sign_msg)
+            elif earned and consec:
+                sign_msg = (
+                    f"签到成功！\n"
+                    f"  总签到: {total_sign} 天\n"
+                    f"  连续签到: {consec} 天\n"
+                    f"  本次获得: {earned} 魔力值\n"
+                    f"  总魔力值: {total_magic}"
+                )
             else:
                 sign_msg = (
                     f"签到成功！\n"
                     f"  总签到: {total_sign} 天\n"
                     f"  总魔力值: {total_magic}"
                 )
-                log_success(sign_msg)
 
+            if already_signed and not detail_match:
+                sign_msg += "\n  (今日已签到)"
+            log_success(sign_msg)
             return True
         else:
-            log_warning("未能解析签到结果，可能已签到或页面结构变更")
+            log_warning("未能解析签到结果，可能页面结构变更")
             # 记录页面返回详情，便于排查解析失败原因
             log_response_detail(response)
-            # 尝试检测已签到提示
-            if "已经签到" in html or "今日已签" in html:
-                log_info("今日已签到")
-                return True
             return False
 
     except requests.exceptions.ProxyError as e:
