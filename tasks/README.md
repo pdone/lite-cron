@@ -8,6 +8,7 @@
 |---------|---------|-------------|-------------|
 | [ikuuu.py](#ikuuupy) | iKuuu 自动签到 | `IKUUU_COOKIE`（或 `IKUUU_EMAIL` + `IKUUU_PWD`） | `IKUUU_EMAIL`, `IKUUU_PWD`, `IKUUU_DOMAIN` |
 | [pttime.py](#pttimepy) | PTTime 站点自动签到 | `PTTIME_COOKIE`, `PTTIME_UID` | `PTTIME_PROXY` |
+| [carpt.py](#carptpy) | CarPT 站点自动签到 | `CARPT_COOKIE` | `CARPT_PROXY`, `CARPT_BASE_URL`, `CARPT_SIGN_QUERY` |
 | [smzdm.py](#smzdmpy) | 什么值得买自动签到 | `SMZDM_COOKIE` | - |
 | [tieba.py](#tiebapy) | 百度贴吧自动签到 | `TIEBA_COOKIE` | - |
 | [fnclub.py](#fnclubpy) | 飞牛Nas论坛自动签到 | `FNNAS_COOKIE` | - |
@@ -79,6 +80,41 @@ tasks:
       PTTIME_COOKIE: "your_cookie_here"
       PTTIME_UID: "12345"
       PTTIME_PROXY: *proxy  # 引用共享代理（可选）
+```
+
+---
+
+### carpt.py
+
+**功能：**
+- 自动签到 CarPT（carpt.net，NexusPHP 站点）
+- 解析本次获得的魔力值、连续签到天数
+- 今日已签到时直接跳过，不误报失败
+- Cookie 失效时明确报错，并把站点响应原文落盘到 `logs/responses/` 便于排查
+
+**实现要点：**
+- 签到入口为 `GET /attendance.php`；站点存在两种签到页形态，脚本自动兼容：直接 GET 即完成签到，或 GET 返回表单后需提取 `formhash` 再 `POST action=attendance&formhash=xxx`。页面若提供带 `sign` 参数的签到链接也会自动跟随一次
+- 使用 `requests`（实测 `curl_cffi` 模拟 Chrome 访问该站会超时），请求头带完整浏览器信息与 `Referer: /index.php`
+- 页面响应按 UTF-8 解码后转可见文本再做中文文案匹配，避免 HTML 标签干扰
+- 无法识别页面结构时不会误报成功，一律判失败并落盘原文
+
+**环境变量：**
+- `CARPT_COOKIE`: 登录 Cookie（必需）。NexusPHP 需包含 `c_secure_uid`、`c_secure_pass` 等登录态字段，建议从浏览器 F12 → Network 复制完整 Cookie
+- `CARPT_PROXY`: 代理地址（可选，如 `http://127.0.0.1:7890`）
+- `CARPT_BASE_URL`: 站点根地址（可选，默认 `https://carpt.net`；域名变更时覆盖）
+- `CARPT_SIGN_QUERY`: 签到页额外查询串（可选，如 `action=sign`；站点签到改版时无需改代码即可适配）
+
+**配置示例：**
+```yaml
+tasks:
+  - name: "CarPT"
+    schedule: "30 3 * * *"
+    script: "tasks/carpt.py"
+    description: "CarPT 每日签到"
+    enabled: true
+    env:
+      CARPT_COOKIE: "c_secure_uid=xxx; c_secure_pass=xxx; ..."
+      # CARPT_PROXY: *proxy  # 引用共享代理（可选）
 ```
 
 ---

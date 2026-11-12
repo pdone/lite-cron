@@ -31,6 +31,17 @@ tasks:
       PTTIME_UID: "your_uid_here"
       # PTTIME_PROXY: *proxy  # 可选，引用顶部 proxy 锚点
 
+  - name: "CarPT"
+    schedule: "30 3 * * *"
+    script: "tasks/carpt.py"
+    description: "CarPT签到"
+    enabled: true
+    env:
+      CARPT_COOKIE: "your_cookie_here"
+      # CARPT_PROXY: *proxy          # 可选，引用顶部 proxy 锚点
+      # CARPT_BASE_URL: "https://carpt.net"   # 可选，域名变更时覆盖
+      # CARPT_SIGN_QUERY: "action=sign"       # 可选，签到页改版时追加查询参数
+
   - name: "SMZDM"
     schedule: "0 4 * * *"
     script: "tasks/smzdm.py"
