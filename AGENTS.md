@@ -328,6 +328,25 @@ python manage.py restart       # No rebuild needed - config is volume-mounted
 - Features: Task list, manual execution, log viewer, config editor
 - API endpoints: `/api/status`, `/api/tasks`, `/api/logs`, `/api/tasks/<name>/run`, `/api/tasks/<name>/toggle`
 
+### 主题模式（浅色 / 跟随系统 / 深色）
+
+主题是**纯浏览器偏好**，不进入 `config.yml`，也不经过 `/api/settings`。
+
+- 开关写在 `<html data-theme="light|dark|system">`，静态默认 `system`；设置弹窗内三态控件顺序为 跟随系统 / 浅色 / 深色。
+- 偏好存 `localStorage` 键 `litecron_theme`；`index.html` / `login.html` 的 `<head>` 内联脚本**必须放在样式表之前**，既避免闪烁，也避免载入时播放一次主题过渡。
+- `src/static/style.css` 顶部有三块 token：`:root`（深色默认）、`:root[data-theme="light"]`（显式浅色）、`@media (prefers-color-scheme: light) { :root[data-theme="system"] }`（跟随系统）。
+  - 两个浅色块内容必须**逐行一致**，改一处必须同步另一处。
+  - 各块声明 `color-scheme`，让滚动条与原生控件跟随主题。
+- 主题切换的过渡由「过渡窗口」实现：JS 在切换瞬间给 `<html>` 挂 `.theme-switching`，窗口期（240ms 过渡 + 160ms 余量）内用 `!important` 把所有元素的颜色类过渡统一成 240ms。**不要改回**在 `:root` 上过渡自定义属性——元素自带的 `transition` 会被逐帧重启而落后，阴影又会瞬变，导致控件「有的先变有的后变」。窗口也不能短于过渡，否则在途过渡会被取消并跳到终值。
+- 「跟随系统」由 JS 解析后写具体 `data-theme="light|dark"`（`THEME_DARK_QUERY` + `writeTheme`），与手动切换共用同一条路径；CSS 的 `@media ... :root[data-theme="system"]` 只负责首屏与 JS 不可用时的兜底。
+- **页面表面不要用随主题变化的渐变**：`background-image` 的重绘跟不上动画帧，实测标题栏能落后内容区 200ms。表面用 `background-color` + 主题无关的 `--surface-sheen` / `--accent-sheen`；渐变 token 若确实要用（仅剩文字渐变），只能挂到 `html.theme-switching`，**不能写进 `*` 规则**，否则每个元素都会重复跑自定义属性过渡。
+- **边框同样不能随主题变色**：1px 边框的颜色变化会被推迟到过渡末尾才提交（实测弹窗描边比底色晚约 130ms）。`--border-color` / `--border-light` 固定为半透明中性色，靠叠在淡入的底色上自动跟随，不再在两个浅色块里重复定义。`--shadow-*` 仍有约 20ms 延迟，因大面积模糊不可见，未处理。
+- `prefers-color-scheme` 驱动的系统主题变化是瞬时切换（无动画），因为浏览器提交媒体查询变更早于 `matchMedia` 的 `change` 事件。
+- 任务日志配色：JS 只写入色相 `--task-hue`（`app.js` 的 `taskHue()`），饱和度/明度/透明度由 `--task-*` token 按主题派生。
+  - 新增着色点必须挂 `task-colored` class，否则 `var(--task-hue)` 取空会让整条声明失效回退成 `currentColor`。
+  - 任务标签 `[TASK:...]` 靠自定义属性继承取色，不需要内联样式。
+- 改动静态资源后记得递增模板里的 `?v=` 版本号。
+
 ## Common Pitfalls
 
 1. **Forgetting logger import**: Tasks MUST use `from logger import ...`, not standard `logging`

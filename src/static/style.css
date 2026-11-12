@@ -2,7 +2,19 @@
    LiteCron Web UI - Modern Theme
    ============================================ */
 
+/* 渐变的色标需要单独注册成可插值颜色。
+   background-image 不可插值，渐变只能用「内部颜色逐帧变化」的方式过渡，
+   否则渐变区域（页头、模态头/脚、渐变按钮）会在切换瞬间跳色，
+   看起来就是「标题栏先变、内容区后变」。 */
+@property --grad-primary-1 { syntax: '<color>'; inherits: true; initial-value: #6366f1; }
+@property --grad-primary-2 { syntax: '<color>'; inherits: true; initial-value: #8b5cf6; }
+@property --grad-primary-3 { syntax: '<color>'; inherits: true; initial-value: #ec4899; }
+
+/* 深色配色（默认）。主题由 <html data-theme="light|dark|system"> 控制，
+   system 分支交给 prefers-color-scheme，详见下方浅色配色块。
+   主题切换的过渡见文件下方的 .theme-switching 规则。 */
 :root {
+    color-scheme: dark;
     --icon-stroke-width: 1.5;
     --icon-color: currentColor;
     --bg-primary: #0f0f14;
@@ -18,8 +30,16 @@
     --text-muted: #6b6f80;
     --text-inverse: #0f0f14;
     
-    --border-color: #2d2d3d;
-    --border-light: #252532;
+    /* 边框与主题无关：用半透明中性色。细边框若跟着主题变色，浏览器会把它当作
+       需要重绘的装饰推迟到最后才更新（实测弹窗边框比背景晚约 130ms 才跳变）；
+       半透明色不参与变色，直接叠在正在淡入的底色上合成，天然与背景同步。 */
+    --border-color: rgba(140, 146, 165, 0.24);
+    --border-light: rgba(140, 146, 165, 0.15);
+
+    /* 叠加层：模态遮罩与行悬停高亮（浅色下需反过来压暗/压深） */
+    --overlay-bg: rgba(0, 0, 0, 0.6);
+    --overlay-bg-strong: rgba(0, 0, 0, 0.7);
+    --hover-overlay: rgba(255, 255, 255, 0.03);
     
     --accent-primary: #6366f1;
     --accent-primary-light: #818cf8;
@@ -41,11 +61,27 @@
     --accent-info: #3b82f6;
     --accent-info-light: #60a5fa;
     --accent-info-glow: rgba(59, 130, 246, 0.3);
+
+    /* 任务日志着色：JS 只提供色相 --task-hue，饱和度/明度/透明度在此按主题派生 */
+    --task-sat: 70%;
+    --task-border-l: 55%;
+    --task-text-s: 85%;
+    --task-text-l: 68%;
+    --task-bg-a: 0.10;
+    --task-badge-a: 0.18;
     
-    --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+    --grad-primary-1: #6366f1;
+    --grad-primary-2: #8b5cf6;
+    --grad-primary-3: #ec4899;
+
+    /* 主题无关的表面光泽：叠在随主题过渡的 background-color 之上。
+       不要改成随主题变化的渐变——background-image 的重绘跟不上动画帧，
+       会让渐变区域与相邻纯色区域脱节（实测标题栏能落后内容区 200ms 以上）。 */
+    --surface-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0%, rgba(0, 0, 0, 0.02) 100%);
+    --accent-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.10) 0%, rgba(0, 0, 0, 0.10) 100%);
+
+    --gradient-primary: linear-gradient(135deg, var(--grad-primary-1) 0%, var(--grad-primary-2) 50%, var(--grad-primary-3) 100%);
     --gradient-card: linear-gradient(145deg, #1e1e2a 0%, #15151f 100%);
-    --gradient-header: linear-gradient(135deg, #1e1e2a 0%, #1a1a24 100%);
-    --gradient-btn-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
     
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
@@ -74,8 +110,56 @@
     --spacing-2xl: 48px;
 }
 
-@media (prefers-color-scheme: light) {
-    :root {
+/* 主题切换过渡。
+   做法：切换瞬间由 JS 给 <html> 挂 .theme-switching，把配色 token 一次性换成新值，
+   再让「所有元素」在同一时序上过渡自己的颜色属性。这样各控件的起止时刻与缓动完全一致。
+   不能改成在 :root 上过渡普通配色 token：那样每个元素自身的 transition（如
+   .data-table tbody tr 的 transition: all 120ms）会逐帧被重新触发，反而落后于他人，
+   而阴影等非颜色 token 又会瞬间跳变，出现「有的先变有的后变」。
+   这里用 !important 覆盖窗口期内元素自带的 transition，保证统一时序；
+   窗口期 240ms 过渡 + 160ms 余量，期间的 hover 反馈被临时接管，肉眼无感。
+   （窗口不能短于过渡：提前摘类会让在途过渡被取消、直接跳到终值。）
+   无 JS 时不做过渡，直接跳到目标配色（功能不受影响）。 */
+
+/* 渐变色标只在 <html> 上过渡：后代通过继承拿到逐帧变化的值即可。
+   绝不能把它们写进下面那条 `*` 规则——那会让每个元素各自再跑一遍这些自定义属性的过渡
+   （实测 3915 个元素 × 7 个色标 ≈ 2.7 万条多余过渡），渐变重绘被拖垮，
+   表现为标题栏先僵住、随后跳一大格，与内容区完全脱节。 */
+html.theme-switching {
+    transition-property: background-color, border-color, color, box-shadow,
+        fill, stroke, outline-color, text-decoration-color,
+        --grad-primary-1, --grad-primary-2, --grad-primary-3 !important;
+    transition-duration: 240ms !important;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition-delay: 0s !important;
+}
+
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+    transition-property: background-color, border-color, color, box-shadow,
+        fill, stroke, outline-color, text-decoration-color !important;
+    transition-duration: 240ms !important;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition-delay: 0s !important;
+}
+
+/* 尊重系统的「减少动态效果」设置 */
+@media (prefers-reduced-motion: reduce) {
+    html.theme-switching,
+    html.theme-switching *,
+    html.theme-switching *::before,
+    html.theme-switching *::after {
+        transition-duration: 1ms !important;
+    }
+}
+
+/* 浅色配色（显式选择「浅色」时生效）。
+   与下方「跟随系统」的浅色块必须逐行一致，两块仅包裹方式与选择器不同，
+   改一处必须同步另一处。用同构的 media 包裹是为了两块能直接 diff 比对。 */
+@media all {
+    :root[data-theme="light"] {
+        color-scheme: light;
         --bg-primary: #f8fafc;
         --bg-secondary: #f1f5f9;
         --bg-card: #ffffff;
@@ -89,8 +173,9 @@
         --text-muted: #94a3b8;
         --text-inverse: #ffffff;
         
-        --border-color: #e2e8f0;
-        --border-light: #f1f5f9;
+        --overlay-bg: rgba(15, 23, 42, 0.35);
+        --overlay-bg-strong: rgba(15, 23, 42, 0.45);
+        --hover-overlay: rgba(0, 0, 0, 0.035);
         
         --accent-primary: #4f46e5;
         --accent-primary-light: #6366f1;
@@ -112,12 +197,86 @@
         --accent-info: #2563eb;
         --accent-info-light: #3b82f6;
         --accent-info-glow: rgba(59, 130, 246, 0.15);
+
+        --task-sat: 62%;
+        --task-border-l: 46%;
+        --task-text-s: 62%;
+        --task-text-l: 26%;
+        --task-bg-a: 0.07;
+        --task-badge-a: 0.13;
         
-        --gradient-primary: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
+        --grad-primary-1: #4f46e5;
+        --grad-primary-2: #7c3aed;
+        --grad-primary-3: #db2777;
+
+        --gradient-primary: linear-gradient(135deg, var(--grad-primary-1) 0%, var(--grad-primary-2) 50%, var(--grad-primary-3) 100%);
         --gradient-card: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
-        --gradient-header: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
-        --gradient-btn-primary: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
         
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+        --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+        --shadow-xl: 0 12px 36px rgba(0, 0, 0, 0.12);
+        --shadow-glow: 0 0 20px var(--accent-primary-glow);
+    }
+}
+
+/* 浅色配色（「跟随系统」且系统为浅色时生效）。
+   与上方 :root[data-theme="light"] 逐行一致，改一处必须同步另一处。 */
+@media (prefers-color-scheme: light) {
+    :root[data-theme="system"] {
+        color-scheme: light;
+        --bg-primary: #f8fafc;
+        --bg-secondary: #f1f5f9;
+        --bg-card: #ffffff;
+        --bg-card-hover: #f8fafc;
+        --bg-surface: #e2e8f0;
+        --bg-input: #f1f5f9;
+        --bg-active: #e2e8f0;
+
+        --text-primary: #1e293b;
+        --text-secondary: #475569;
+        --text-muted: #94a3b8;
+        --text-inverse: #ffffff;
+
+        --overlay-bg: rgba(15, 23, 42, 0.35);
+        --overlay-bg-strong: rgba(15, 23, 42, 0.45);
+        --hover-overlay: rgba(0, 0, 0, 0.035);
+
+        --accent-primary: #4f46e5;
+        --accent-primary-light: #6366f1;
+        --accent-primary-dark: #4338ca;
+        --accent-primary-glow: rgba(99, 102, 241, 0.2);
+
+        --accent-success: #16a34a;
+        --accent-success-light: #22c55e;
+        --accent-success-glow: rgba(34, 197, 94, 0.15);
+
+        --accent-warning: #d97706;
+        --accent-warning-light: #f59e0b;
+        --accent-warning-glow: rgba(245, 158, 11, 0.15);
+
+        --accent-danger: #dc2626;
+        --accent-danger-light: #ef4444;
+        --accent-danger-glow: rgba(239, 68, 68, 0.15);
+
+        --accent-info: #2563eb;
+        --accent-info-light: #3b82f6;
+        --accent-info-glow: rgba(59, 130, 246, 0.15);
+
+        --task-sat: 62%;
+        --task-border-l: 46%;
+        --task-text-s: 62%;
+        --task-text-l: 26%;
+        --task-bg-a: 0.07;
+        --task-badge-a: 0.13;
+
+        --grad-primary-1: #4f46e5;
+        --grad-primary-2: #7c3aed;
+        --grad-primary-3: #db2777;
+
+        --gradient-primary: linear-gradient(135deg, var(--grad-primary-1) 0%, var(--grad-primary-2) 50%, var(--grad-primary-3) 100%);
+        --gradient-card: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+
         --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
         --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
         --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
@@ -215,7 +374,8 @@ svg {
     gap: var(--spacing-md);
     padding: var(--spacing-lg);
     border-top: 1px solid var(--border-color);
-    background: var(--gradient-header);
+    background-color: var(--bg-card);
+    background-image: var(--surface-sheen);
 }
 
 .modal-footer .btn {
@@ -467,7 +627,8 @@ body::before {
 }
 
 .btn-primary {
-    background: var(--gradient-btn-primary);
+    background-color: var(--accent-primary);
+    background-image: var(--accent-sheen);
     color: var(--text-inverse);
     box-shadow: 0 2px 8px var(--accent-primary-glow);
 }
@@ -559,7 +720,8 @@ body::before {
     align-items: center;
     padding: var(--spacing-lg);
     border-bottom: 1px solid var(--border-color);
-    background: var(--gradient-header);
+    background-color: var(--bg-card);
+    background-image: var(--surface-sheen);
     gap: var(--spacing-md);
     flex-wrap: wrap;
 }
@@ -901,7 +1063,8 @@ body::before {
 }
 
 .btn-run {
-    background: var(--gradient-btn-primary);
+    background-color: var(--accent-primary);
+    background-image: var(--accent-sheen);
     color: var(--text-inverse);
     box-shadow: 0 2px 8px var(--accent-primary-glow);
     position: relative;
@@ -1053,13 +1216,13 @@ body::before {
 .modal-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--overlay-bg);
     backdrop-filter: blur(8px);
     transition: background var(--transition-normal);
 }
 
 .modal.active .modal-overlay {
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--overlay-bg-strong);
 }
 
 .modal-content {
@@ -1092,7 +1255,8 @@ body::before {
     align-items: center;
     padding: var(--spacing-lg);
     border-bottom: 1px solid var(--border-color);
-    background: var(--gradient-header);
+    background-color: var(--bg-card);
+    background-image: var(--surface-sheen);
 }
 
 .modal-title {
@@ -1203,7 +1367,9 @@ body::before {
 }
 
 .file-item.active .file-meta {
-    color: rgba(255, 255, 255, 0.7);
+    /* 跟随父级已选定的 --text-inverse，深浅主题下都成立 */
+    color: inherit;
+    opacity: 0.75;
 }
 
 .logs-content {
@@ -1304,6 +1470,13 @@ body::before {
     box-shadow: 0 0 0 1px var(--accent-primary);
 }
 
+/* 任务筛选按钮选中时改用任务色相；「全部」按钮没有 --task-hue，保持上面的紫色默认态 */
+.log-filter-btn.active.task-colored {
+    border-color: hsl(var(--task-hue, 220) var(--task-sat) var(--task-border-l));
+    color: hsl(var(--task-hue, 220) var(--task-text-s) var(--task-text-l));
+    box-shadow: 0 0 0 1px hsl(var(--task-hue, 220) var(--task-sat) var(--task-border-l));
+}
+
 .log-group {
     border-left: 3px solid var(--border-color);
     border-radius: var(--radius-md);
@@ -1314,6 +1487,20 @@ body::before {
 .log-group-system {
     border-left-color: var(--text-muted) !important;
     background: rgba(107, 111, 128, 0.05) !important;
+}
+
+/* 任务色派生：JS 只写入 --task-hue，饱和度/明度/透明度在此按当前主题取 token。
+   派生规则必须收在 .task-colored 作用域内——系统日志组等元素没有 --task-hue，
+   若直接挂在 .log-group 上，var() 取空会让整条声明失效并回退成 currentColor。
+   自定义属性会继承，因此组内的 [TASK:...] 标签无需任何内联样式即可同色。 */
+.log-group.task-colored {
+    border-left-color: hsl(var(--task-hue, 220) var(--task-sat) var(--task-border-l));
+    background: hsl(var(--task-hue, 220) var(--task-sat) var(--task-border-l) / var(--task-bg-a));
+}
+
+.log-group.task-colored > .log-group-header {
+    background: hsl(var(--task-hue, 220) var(--task-sat) var(--task-border-l) / var(--task-badge-a));
+    color: hsl(var(--task-hue, 220) var(--task-text-s) var(--task-text-l));
 }
 
 .log-group-header {
@@ -1372,7 +1559,7 @@ body::before {
 }
 
 .log-line:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--hover-overlay);
 }
 
 .log-level {
@@ -1406,6 +1593,9 @@ body::before {
     border-radius: 3px;
     font-size: 0.6875rem;
     font-family: var(--font-mono);
+    /* 色相继承自所属 .log-group 的 --task-hue */
+    color: hsl(var(--task-hue, 220) var(--task-text-s) var(--task-text-l));
+    background: hsl(var(--task-hue, 220) var(--task-sat) var(--task-border-l) / var(--task-badge-a));
 }
 
 .terminal {
@@ -2143,6 +2333,58 @@ code
     color: var(--accent-success);
 }
 
+/* ==================== 三态分段控件（主题选择） ==================== */
+
+.theme-segmented {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+}
+
+.theme-segment {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.4;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.theme-segment:hover {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+
+.theme-segment.is-active {
+    background: var(--bg-active);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.theme-segment:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 1px;
+}
+
+.theme-segment-icon {
+    width: 14px;
+    height: 14px;
+    stroke-width: var(--icon-stroke-width);
+}
+
 /* ==================== 设置弹窗 ==================== */
 
 .settings-modal-content {
@@ -2187,6 +2429,7 @@ code
     align-items: center;
     justify-content: space-between;
     gap: var(--spacing-lg);
+    flex-wrap: wrap;
 }
 
 .setting-title {
@@ -2258,7 +2501,8 @@ code
     gap: var(--spacing-md);
     padding: var(--spacing-lg);
     border-top: 1px solid var(--border-color);
-    background: var(--gradient-header);
+    background-color: var(--bg-card);
+    background-image: var(--surface-sheen);
 }
 
 .settings-footer .btn {

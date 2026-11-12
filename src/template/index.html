@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="system">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,7 +8,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='7') }}">
+    <!-- 首屏应用存过的主题偏好：必须放在样式表之前，这样首次样式计算拿到的就是终值，
+         既不闪烁，也不会在加载时触发一次主题过渡动画。
+         无偏好时保持 data-theme="system"，由 CSS 跟随系统。 -->
+    <script>
+        try {
+            var savedTheme = localStorage.getItem('litecron_theme');
+            if (savedTheme === 'light' || savedTheme === 'dark') {
+                document.documentElement.dataset.theme = savedTheme;
+            }
+        } catch (e) {}
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='13') }}">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
@@ -290,8 +301,8 @@
 
     {% include 'settings_modal.html' %}
 
-    <script src="{{ url_for('static', filename='app.js', v='6') }}"></script>
-    <script src="{{ url_for('static', filename='settings.js', v='2') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='10') }}"></script>
+    <script src="{{ url_for('static', filename='settings.js', v='3') }}"></script>
     <script>
         lucide.createIcons();
     </script>

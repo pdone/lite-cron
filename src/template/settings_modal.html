@@ -23,13 +23,33 @@
                 <div class="setting-row">
                     <div class="setting-info">
                         <div class="setting-title">隐藏已禁用的任务</div>
-                        <div class="setting-desc">开启后，任务列表不再展示已禁用的任务。此偏好记录在当前浏览器（localStorage），刷新或重新打开页面仍然生效。</div>
+                        <div class="setting-desc">开启后，任务列表不再展示已禁用的任务。开关立即生效，无需保存；此偏好记录在当前浏览器（localStorage），刷新或重新打开页面仍然生效。</div>
                     </div>
                     <label class="switch hide-disabled-switch" for="hide-disabled-tasks" title="启用后列表中不再展示已禁用的任务">
                         <input type="checkbox" id="hide-disabled-tasks" role="switch" />
                         <span class="switch-track"></span>
                         <span class="switch-label">隐藏已禁用</span>
                     </label>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-title">主题</div>
+                        <div class="setting-desc">选择立即生效，无需保存。此偏好记录在当前浏览器，不写入 config.yml，也不影响其他设备。</div>
+                    </div>
+                    <div class="theme-segmented" id="theme-segmented" role="radiogroup" aria-label="主题模式">
+                        <button type="button" class="theme-segment" data-theme-value="system" role="radio" aria-checked="false">
+                            <i data-lucide="monitor" class="theme-segment-icon"></i>
+                            <span>跟随系统</span>
+                        </button>
+                        <button type="button" class="theme-segment" data-theme-value="light" role="radio" aria-checked="false">
+                            <i data-lucide="sun" class="theme-segment-icon"></i>
+                            <span>浅色</span>
+                        </button>
+                        <button type="button" class="theme-segment" data-theme-value="dark" role="radio" aria-checked="false">
+                            <i data-lucide="moon" class="theme-segment-icon"></i>
+                            <span>深色</span>
+                        </button>
+                    </div>
                 </div>
             </section>
 

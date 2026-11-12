@@ -10,6 +10,7 @@ const state = {
     sortColumn: null,
     sortDirection: 'asc',
     hideDisabledTasks: false,
+    theme: 'system',
     currentLogFilename: null,
     currentLogGroups: [],
     currentLogFilter: 'all'
@@ -27,22 +28,10 @@ function hashString(str) {
 
 const GOLDEN_ANGLE = 137.508;
 
-function makeTaskColor(name) {
-    const hue = (hashString(name || 'task') * GOLDEN_ANGLE) % 360;
-    return {
-        bg:     `hsla(${hue}, 70%, 55%, 0.10)`,
-        border: `hsl(${hue}, 70%, 55%)`,
-        text:   `hsl(${hue}, 85%, 68%)`,
-        badge:  `hsla(${hue}, 70%, 55%, 0.18)`
-    };
-}
-
-// 任务名到颜色的缓存（保证同一任务始终同色）
-const taskColorMap = {};
-
-function getTaskColor(taskName) {
-    if (!taskColorMap[taskName]) taskColorMap[taskName] = makeTaskColor(taskName);
-    return taskColorMap[taskName];
+// 只算出色相，饱和度/明度/透明度交给 CSS 按当前主题派生（见 style.css 的 .task-colored）。
+// 这样切换主题（含系统主题变化）不需要清缓存、不需要重渲染，配色随级联自动更新。
+function taskHue(name) {
+    return Math.round((hashString(name || 'task') * GOLDEN_ANGLE) % 360);
 }
 
 const elements = {
@@ -60,6 +49,7 @@ const elements = {
     settingsModal: document.getElementById('settings-modal'),
     settingsModalClose: document.getElementById('settings-modal-close'),
     hideDisabledToggle: document.getElementById('hide-disabled-tasks'),
+    themeSegmented: document.getElementById('theme-segmented'),
     logsModal: document.getElementById('logs-modal'),
     runModal: document.getElementById('run-modal'),
     editModal: document.getElementById('edit-modal'),
@@ -191,6 +181,89 @@ function setHideDisabledTasks(hidden) {
     lucide.createIcons();
 }
 
+// ==================== 主题模式（浅色 / 跟随系统 / 深色，纯浏览器偏好） ====================
+// 只维护 <html data-theme>：浅色/深色的解析与配色全在 style.css 完成，
+// 因此切换主题不需要重渲染任何内容（日志分组、任务标签由 CSS 级联自动跟随）。
+// 「跟随系统」交给 prefers-color-scheme，系统主题变化浏览器会原生重算，无需 JS 参与。
+
+const THEME_STORAGE_KEY = 'litecron_theme';
+const THEME_MODES = ['light', 'system', 'dark'];
+const THEME_TRANSITION_MS = 240;
+// 窗口必须比过渡本身更长：过早摘掉类会让元素回落到自身的 transition，
+// 在途的颜色过渡被取消并直接跳到终值。首帧提交也可能推迟，故留足余量。
+const THEME_WINDOW_MS = THEME_TRANSITION_MS + 160;
+let themeSwitchTimer = null;
+
+function loadThemePreference() {
+    try {
+        const saved = localStorage.getItem(THEME_STORAGE_KEY);
+        if (THEME_MODES.includes(saved)) state.theme = saved;
+    } catch (e) {
+        console.warn('读取主题偏好失败:', e);
+    }
+    return state.theme;
+}
+
+function saveThemePreference(mode) {
+    try {
+        localStorage.setItem(THEME_STORAGE_KEY, mode);
+    } catch (e) {
+        // 存储不可用（隐私模式等）：本次会话内仍然生效，只是不再持久化
+        console.warn('保存主题偏好失败:', e);
+    }
+}
+
+function syncThemeSegmented() {
+    if (!elements.themeSegmented) return;
+    elements.themeSegmented.querySelectorAll('.theme-segment').forEach((btn) => {
+        const active = btn.dataset.themeValue === state.theme;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+}
+
+// 切换瞬间给 <html> 挂 .theme-switching：窗口期内所有元素按同一时长/缓动过渡颜色，
+// 各控件因此同步。只靠 CSS 过渡自定义属性做不到——元素自带的 transition
+// （如表格行的 transition: all 120ms）会被逐帧重启而落后，阴影等非颜色 token 又会瞬变。
+function markThemeSwitching() {
+    const root = document.documentElement;
+    root.classList.add('theme-switching');
+    if (themeSwitchTimer) clearTimeout(themeSwitchTimer);
+    themeSwitchTimer = setTimeout(() => {
+        root.classList.remove('theme-switching');
+        themeSwitchTimer = null;
+    }, THEME_WINDOW_MS);
+}
+
+// 「跟随系统」由 JS 解析成具体的 light/dark 再写入 data-theme。
+// 这样系统主题变化时能先挂过渡窗口再改属性，与手动切换走完全相同的路径、完全同步。
+// CSS 里 @media (prefers-color-scheme: light) { :root[data-theme="system"] } 仍保留：
+// 首屏（脚本未执行前）与 JS 不可用时由它兜底。
+const THEME_DARK_QUERY = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+function resolveTheme(mode) {
+    if (mode !== 'system') return mode;
+    return THEME_DARK_QUERY && THEME_DARK_QUERY.matches ? 'dark' : 'light';
+}
+
+let appliedTheme = null;  // 上一次实际生效的 light/dark
+
+function writeTheme(concrete) {
+    const root = document.documentElement;
+    // 先挂过渡窗口再改属性，保证同一帧内样式重算时过渡已生效
+    if (appliedTheme && appliedTheme !== concrete) markThemeSwitching();
+    appliedTheme = concrete;
+    root.dataset.theme = concrete;
+}
+
+function applyTheme(mode, persist) {
+    const next = THEME_MODES.includes(mode) ? mode : 'system';
+    state.theme = next;
+    writeTheme(resolveTheme(next));
+    syncThemeSegmented();
+    if (persist) saveThemePreference(next);
+}
+
 // ==================== 日志分组与着色渲染 ====================
 
 function parseLogGroups(content) {
@@ -243,14 +316,11 @@ function renderLogGroups(groups, filter) {
         section.className = 'log-group';
 
         if (group.task) {
-            const color = getTaskColor(group.task);
-            section.style.borderLeftColor = color.border;
-            section.style.background = color.bg;
+            section.classList.add('task-colored');
+            section.style.setProperty('--task-hue', taskHue(group.task));
 
             const header = document.createElement('div');
             header.className = 'log-group-header';
-            header.style.background = color.badge;
-            header.style.color = color.text;
             header.innerHTML = `<i data-lucide="chevron-down" class="log-group-chevron"></i><span class="log-group-task-name">${escapeHtml(group.task)}</span><span class="log-group-line-count">${group.lines.length} 行</span>`;
             section.appendChild(header);
         } else {
@@ -280,7 +350,7 @@ function renderLogGroups(groups, filter) {
             if (group.task) {
                 escapedLine = escapedLine.replace(
                     `[TASK:${escapeHtml(group.task)}]`,
-                    `<span class="log-task-tag" style="color:${getTaskColor(group.task).text}; background:${getTaskColor(group.task).badge}">[TASK:${escapeHtml(group.task)}]</span>`
+                    `<span class="log-task-tag">[TASK:${escapeHtml(group.task)}]</span>`
                 );
             }
             lineDiv.innerHTML = escapedLine;
@@ -326,17 +396,12 @@ function renderTaskFilter(groups) {
     container.appendChild(btnAll);
 
     for (const task of tasks) {
-        const color = getTaskColor(task);
         const isActive = state.currentLogFilter === task;
         const btn = document.createElement('button');
-        btn.className = 'log-filter-btn' + (isActive ? ' active' : '');
+        // task-colored + --task-hue：选中态的边框/描边/字色由 CSS 按当前主题派生
+        btn.className = 'log-filter-btn task-colored' + (isActive ? ' active' : '');
         btn.textContent = task;
-        // 选中时边框、字体颜色均使用任务分组颜色（同步覆盖默认紫色描边光晕），未选中使用默认配色
-        if (isActive) {
-            btn.style.borderColor = color.border;
-            btn.style.boxShadow = `0 0 0 1px ${color.border}`;
-            btn.style.color = color.text;
-        }
+        btn.style.setProperty('--task-hue', taskHue(task));
         btn.onclick = () => {
             state.currentLogFilter = task;
             refreshLogView();
@@ -369,6 +434,8 @@ function refreshLogView() {
 function init() {
     loadSortState();
     loadHideDisabledState();
+    // 首屏主题已由 <head> 内联脚本应用，这里只把控件状态与存储值对齐
+    applyTheme(loadThemePreference(), false);
     bindEvents();
     loadData(false);
 }
@@ -418,6 +485,27 @@ function bindEvents() {
     elements.hideDisabledToggle.addEventListener('change', (e) => {
         setHideDisabledTasks(e.target.checked);
     });
+
+    if (elements.themeSegmented) {
+        elements.themeSegmented.addEventListener('click', (e) => {
+            const btn = e.target.closest('.theme-segment');
+            if (!btn) return;
+            applyTheme(btn.dataset.themeValue, true);
+        });
+    }
+
+    // 「跟随系统」下操作系统主题变化：由 JS 重新解析并写入具体主题，
+    // 与手动切换走同一条路径，因此过渡窗口与同步性完全一致
+    if (THEME_DARK_QUERY) {
+        const onSchemeChange = () => {
+            if (state.theme === 'system') writeTheme(resolveTheme('system'));
+        };
+        if (THEME_DARK_QUERY.addEventListener) {
+            THEME_DARK_QUERY.addEventListener('change', onSchemeChange);
+        } else if (THEME_DARK_QUERY.addListener) {
+            THEME_DARK_QUERY.addListener(onSchemeChange);
+        }
+    }
 
     // 其他标签页修改显示偏好时，实时同步首页列表与设置弹窗开关
     window.addEventListener('storage', (e) => {

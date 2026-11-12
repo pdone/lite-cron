@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="system">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,7 +8,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- 与首页同一套主题偏好，同样放在样式表之前，避免登录页与主界面割裂或首屏过渡 -->
+    <script>
+        try {
+            var savedTheme = localStorage.getItem('litecron_theme');
+            if (savedTheme === 'light' || savedTheme === 'dark') {
+                document.documentElement.dataset.theme = savedTheme;
+            }
+        } catch (e) {}
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='13') }}">
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         .login-wrap {
