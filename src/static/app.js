@@ -9,6 +9,7 @@ const state = {
     isRunning: false,
     sortColumn: null,
     sortDirection: 'asc',
+    hideDisabledTasks: false,
     currentLogFilename: null,
     currentLogGroups: [],
     currentLogFilter: 'all'
@@ -54,6 +55,11 @@ const elements = {
     btnEnableAll: document.getElementById('btn-enable-all'),
     btnDisableAll: document.getElementById('btn-disable-all'),
     btnMaximize: document.getElementById('btn-maximize'),
+    btnSettings: document.getElementById('btn-settings'),
+    btnSettingsMaximize: document.getElementById('btn-settings-maximize'),
+    settingsModal: document.getElementById('settings-modal'),
+    settingsModalClose: document.getElementById('settings-modal-close'),
+    hideDisabledToggle: document.getElementById('hide-disabled-tasks'),
     logsModal: document.getElementById('logs-modal'),
     runModal: document.getElementById('run-modal'),
     editModal: document.getElementById('edit-modal'),
@@ -105,6 +111,7 @@ const editState = {
 };
 
 const SORT_STORAGE_KEY = 'litecron_task_sort';
+const HIDE_DISABLED_STORAGE_KEY = 'litecron_hide_disabled_tasks';
 
 // 401 鉴权失效拦截：统一跳转登录页（fetch 包装，对所有 API 调用生效）
 const _originalFetch = window.fetch;
@@ -145,6 +152,43 @@ function saveSortState() {
     } catch (e) {
         console.warn('保存排序状态失败:', e);
     }
+}
+
+// ==================== 隐藏已禁用任务（偏好由设置弹窗记录到 localStorage） ====================
+
+function syncHideDisabledToggle() {
+    if (elements.hideDisabledToggle) {
+        elements.hideDisabledToggle.checked = state.hideDisabledTasks;
+    }
+}
+
+function loadHideDisabledState() {
+    try {
+        state.hideDisabledTasks = localStorage.getItem(HIDE_DISABLED_STORAGE_KEY) === 'true';
+    } catch (e) {
+        console.warn('读取隐藏禁用任务状态失败:', e);
+    }
+    syncHideDisabledToggle();
+}
+
+function saveHideDisabledState() {
+    try {
+        if (state.hideDisabledTasks) {
+            localStorage.setItem(HIDE_DISABLED_STORAGE_KEY, 'true');
+        } else {
+            localStorage.removeItem(HIDE_DISABLED_STORAGE_KEY);
+        }
+    } catch (e) {
+        console.warn('保存隐藏禁用任务状态失败:', e);
+    }
+}
+
+function setHideDisabledTasks(hidden) {
+    state.hideDisabledTasks = Boolean(hidden);
+    syncHideDisabledToggle();
+    saveHideDisabledState();
+    renderTasks();
+    lucide.createIcons();
 }
 
 // ==================== 日志分组与着色渲染 ====================
@@ -324,6 +368,7 @@ function refreshLogView() {
 
 function init() {
     loadSortState();
+    loadHideDisabledState();
     bindEvents();
     loadData(false);
 }
@@ -356,6 +401,33 @@ function bindEvents() {
             onConfirm: () => batchToggleTasks(false)
         });
     });
+
+    elements.btnSettings.addEventListener('click', () => {
+        syncHideDisabledToggle();
+        openModal('settings');
+        if (typeof window.loadSettingsModal === 'function') {
+            window.loadSettingsModal();
+        }
+        lucide.createIcons({ root: elements.settingsModal });
+    });
+
+    elements.btnSettingsMaximize.addEventListener('click', () => {
+        toggleMaximize(elements.btnSettingsMaximize);
+    });
+
+    elements.hideDisabledToggle.addEventListener('change', (e) => {
+        setHideDisabledTasks(e.target.checked);
+    });
+
+    // 其他标签页修改显示偏好时，实时同步首页列表与设置弹窗开关
+    window.addEventListener('storage', (e) => {
+        if (e.key === HIDE_DISABLED_STORAGE_KEY) {
+            loadHideDisabledState();
+            renderTasks();
+            lucide.createIcons();
+        }
+    });
+
     elements.btnClean.addEventListener('click', () => {
         showConfirm({
             title: '确认清理日志',
@@ -364,12 +436,15 @@ function bindEvents() {
         });
     });
     
-    elements.btnMaximize.addEventListener('click', toggleMaximize);
+    elements.btnMaximize.addEventListener('click', () => {
+        toggleMaximize(elements.btnMaximize);
+    });
     
     elements.modalClose.addEventListener('click', () => closeModal('logs'));
     elements.runModalClose.addEventListener('click', () => closeModal('run'));
     elements.editModalClose.addEventListener('click', () => closeModal('edit'));
     elements.editCancel.addEventListener('click', () => closeModal('edit'));
+    elements.settingsModalClose.addEventListener('click', () => closeModal('settings'));
     
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', (e) => {
@@ -585,27 +660,37 @@ function getSortedTasks(tasks) {
 
 function renderTasks() {
     const mobileTaskList = document.getElementById('mobile-task-list');
-    const tasks = getSortedTasks(state.tasks);
+    const visibleTasks = state.hideDisabledTasks
+        ? state.tasks.filter(t => t.enabled)
+        : state.tasks;
+    const tasks = getSortedTasks(visibleTasks);
 
     if (tasks.length === 0) {
+        const hiddenCount = state.tasks.length - visibleTasks.length;
+        const emptyHtml = hiddenCount > 0
+            ? `
+                <i data-lucide="eye-off" class="empty-icon"></i>
+                <div class="empty-text">已隐藏 ${hiddenCount} 个禁用任务</div>
+                <div class="empty-subtext">
+                    <button onclick="setHideDisabledTasks(false)" class="btn btn-secondary" style="margin-top: 12px;">
+                        <i data-lucide="eye" class="btn-icon"></i> 显示全部
+                    </button>
+                </div>
+              `
+            : `
+                <i data-lucide="list-checks" class="empty-icon"></i>
+                <div class="empty-text">暂无配置的任务</div>
+                <div class="empty-subtext">在 config.yml 中添加任务配置</div>
+              `;
+
         elements.taskList.innerHTML = `
             <tr>
-                <td colspan="6" class="empty-state">
-                    <i data-lucide="list-checks" class="empty-icon"></i>
-                    <div class="empty-text">暂无配置的任务</div>
-                    <div class="empty-subtext">在 config.yml 中添加任务配置</div>
-                </td>
+                <td colspan="6" class="empty-state">${emptyHtml}</td>
             </tr>
         `;
         
         if (mobileTaskList) {
-            mobileTaskList.innerHTML = `
-                <div class="empty-state">
-                    <i data-lucide="list-checks" class="empty-icon"></i>
-                    <div class="empty-text">暂无配置的任务</div>
-                    <div class="empty-subtext">在 config.yml 中添加任务配置</div>
-                </div>
-            `;
+            mobileTaskList.innerHTML = `<div class="empty-state">${emptyHtml}</div>`;
         }
         return;
     }
@@ -955,19 +1040,20 @@ function closeAllModals() {
     document.body.style.overflow = '';
 }
 
-function toggleMaximize() {
-    const modalContent = elements.logsModal.querySelector('.modal-content');
+function toggleMaximize(btn) {
+    // 从按钮向上找到所属弹窗，日志与设置弹窗共用同一套最大化逻辑
+    const modalContent = btn.closest('.modal').querySelector('.modal-content');
     const isMaximized = modalContent.classList.toggle('maximized');
     
-    const btnIcon = elements.btnMaximize.querySelector('.btn-icon');
+    const btnIcon = btn.querySelector('.btn-icon');
     if (isMaximized) {
         btnIcon.setAttribute('data-lucide', 'minimize-2');
-        elements.btnMaximize.title = '还原';
+        btn.title = '还原';
     } else {
         btnIcon.setAttribute('data-lucide', 'maximize-2');
-        elements.btnMaximize.title = '最大化';
+        btn.title = '最大化';
     }
-    lucide.createIcons({ root: elements.btnMaximize });
+    lucide.createIcons({ root: btn });
 }
 
 let confirmCallback = null;

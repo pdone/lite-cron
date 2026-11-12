@@ -1831,7 +1831,8 @@ body::before {
     outline: none;
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 3px var(--accent-primary-glow);
-    background: var(--bg-active);
+    /* 只改背景色，避免 background 简写把 select 的自定义箭头清掉 */
+    background-color: var(--bg-active);
 }
 
 .form-control.mono {
@@ -1864,10 +1865,30 @@ textarea.form-control {
     box-shadow: 0 0 0 3px var(--accent-danger-glow);
 }
 
-.form-control:read-only {
+/* :read-only 会命中 select（它不属于可编辑文本框），因此只对 input/textarea 应用只读样式 */
+input.form-control:read-only,
+textarea.form-control:read-only {
     background: var(--bg-primary);
     color: var(--text-muted);
     cursor: not-allowed;
+}
+
+/* 下拉框：隐藏系统原生箭头，改用位置可控的 chevron 图标 */
+select.form-control {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 38px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0a4b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    background-size: 16px 16px;
+    cursor: pointer;
+}
+
+select.form-control option {
+    background: var(--bg-card);
+    color: var(--text-primary);
 }
 
 .form-field-hint {
@@ -2062,7 +2083,7 @@ code
     border-color: var(--accent-danger);
 }
 
-/* ==================== Switch 开关（modal 标题栏） ==================== */
+/* ==================== Switch 开关（仅轨道 + 文字） ==================== */
 
 .switch {
     display: inline-flex;
@@ -2070,17 +2091,6 @@ code
     gap: var(--spacing-sm);
     cursor: pointer;
     user-select: none;
-    margin-left: auto;
-    margin-right: var(--spacing-md);
-    padding: 4px 10px 4px 4px;
-    border-radius: var(--radius-full);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    transition: all var(--transition-fast);
-}
-
-.switch:hover {
-    border-color: var(--border-light);
 }
 
 .switch input {
@@ -2095,28 +2105,26 @@ code
     position: relative;
     width: 34px;
     height: 18px;
-    background: var(--bg-input);
-    border: 1px solid var(--border-color);
+    background: var(--bg-surface);
     border-radius: var(--radius-full);
-    transition: all var(--transition-fast);
+    transition: background var(--transition-fast);
     flex-shrink: 0;
 }
 
 .switch-track::after {
     content: "";
     position: absolute;
-    top: 1px;
-    left: 1px;
+    top: 2px;
+    left: 2px;
     width: 14px;
     height: 14px;
     background: var(--text-muted);
     border-radius: 50%;
-    transition: all var(--transition-fast);
+    transition: transform var(--transition-fast), background var(--transition-fast);
 }
 
 .switch input:checked + .switch-track {
     background: var(--accent-success);
-    border-color: var(--accent-success);
 }
 
 .switch input:checked + .switch-track::after {
@@ -2133,6 +2141,140 @@ code
 
 .switch input:checked ~ .switch-label {
     color: var(--accent-success);
+}
+
+/* ==================== 设置弹窗 ==================== */
+
+.settings-modal-content {
+    max-width: 1080px;
+}
+
+/* 最大化时长表单仍可滚动，避免被裁剪 */
+.modal-content.maximized .modal-body.settings-modal-body {
+    display: block;
+    overflow-y: auto;
+    max-height: none;
+    flex: 1;
+}
+
+.settings-block + .settings-block {
+    border-top: 1px solid var(--border-color);
+    margin-top: var(--spacing-lg);
+    padding-top: var(--spacing-lg);
+}
+
+.settings-block-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-md);
+}
+
+.settings-block-title .inline-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.settings-block-title .settings-badge {
+    margin-left: auto;
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-lg);
+}
+
+.setting-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.setting-desc {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+.settings-badge {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-full);
+    padding: 4px 10px;
+    white-space: nowrap;
+}
+
+.settings-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color);
+    margin-top: var(--spacing-sm);
+}
+
+.settings-section-title .inline-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.settings-switches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+}
+
+/* 设置弹窗内的开关：文字不换行，避免被挤压 */
+.settings-switches .switch,
+.hide-disabled-switch {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.settings-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: var(--spacing-md);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.settings-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-md);
+    padding: var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+    background: var(--gradient-header);
+}
+
+.settings-footer .btn {
+    min-width: 120px;
+    justify-content: center;
+}
+
+.settings-modal-body .masonry-grid .span-2 {
+    grid-column: 1 / -1;
+}
+
+.settings-textarea {
+    resize: vertical;
+    overflow: auto;
+    min-height: 90px;
+    max-height: 240px;
 }
 
 /* 滚动条样式 */
@@ -2257,6 +2399,19 @@ code
         padding: var(--spacing-sm) var(--spacing-md);
         min-height: 40px;
         font-size: 0.8125rem;
+    }
+
+    .setting-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .settings-footer {
+        flex-direction: column-reverse;
+    }
+
+    .settings-footer .btn {
+        width: 100%;
     }
     
     .table-container {

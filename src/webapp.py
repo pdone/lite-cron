@@ -168,6 +168,276 @@ def toggle_task_enabled(task_name: str) -> Optional[bool]:
         return None
 
 
+# ============== 设置页：共享代理锚点与通知配置 ==============
+
+# 通知配置中允许由设置页更新的字段（config.yml 的 notify 段）
+NOTIFY_FIELDS = {
+    "webhook": ("url", "method", "content_type", "body", "headers"),
+    "ntfy": (
+        "url", "topic", "priority", "token", "username", "password",
+        "actions", "headers",
+    ),
+}
+# 这些字段需保持 YAML 块标量（|）样式，避免多行文本被转义成单行
+NOTIFY_BLOCK_FIELDS = {"headers"}
+WEBHOOK_METHODS = ("GET", "POST", "PUT", "PATCH")
+WEBHOOK_CONTENT_TYPES = (
+    "application/json",
+    "application/x-www-form-urlencoded",
+    "text/plain",
+    "text/markdown",
+)
+
+
+def _default_notify_settings() -> Dict[str, Any]:
+    """设置页表单的默认值（与 notify.py 的默认值保持一致）"""
+    return {
+        "on_failure": True,
+        "on_success": False,
+        "webhook": {
+            "url": "",
+            "method": "POST",
+            "content_type": "application/json",
+            "body": "",
+            "headers": "",
+        },
+        "ntfy": {
+            "url": "",
+            "topic": "",
+            "priority": "3",
+            "token": "",
+            "username": "",
+            "password": "",
+            "actions": "",
+            "headers": "",
+        },
+    }
+
+
+def _ruamel_yaml():
+    """创建保留引号/注释/锚点的 YAML 解析器"""
+    from ruamel.yaml import YAML
+
+    ry = YAML()
+    ry.preserve_quotes = True
+    return ry
+
+
+def _find_shared_proxy(doc):
+    """定位共享代理锚点，返回 (顶层键名, 锚点节点, 锚点名)
+
+    优先使用顶层 `proxy: &proxy ...`；也兼容自定义锚点名或自定义顶层键名。
+    若 proxy 键存在但没有锚点，返回锚点名为 None（保存时升级为锚点定义）。
+    """
+    if not doc:
+        return None, None, None
+
+    fallback = None
+    for key, val in doc.items():
+        if key in ("tasks", "notify", "webui", "global_env"):
+            continue
+        if not isinstance(val, str):
+            continue
+        anchor = getattr(val, "anchor", None)
+        name = getattr(anchor, "value", None)
+        if not name:
+            continue
+        if str(key) == "proxy":
+            return str(key), val, name
+        if fallback is None:
+            fallback = (str(key), val, name)
+
+    if fallback:
+        return fallback
+    if "proxy" in doc and isinstance(doc["proxy"], str):
+        return "proxy", doc["proxy"], None
+    return None, None, None
+
+
+def _walk_anchor_refs(container, old_node, new_node=None) -> int:
+    """统计或替换 YAML 中指向锚点节点的所有引用（含顶层定义处）
+
+    new_node 为 None 时只统计；否则把每个引用原地替换为 new_node。
+    ruamel 加载 `*proxy` 时返回的就是锚点节点本身（同一对象），因此必须
+    同步替换所有引用，否则 dump 后别名仍指向旧值。
+    """
+    count = 0
+    if isinstance(container, dict):
+        for key in list(container.keys()):
+            val = container[key]
+            if val is old_node:
+                count += 1
+                if new_node is not None:
+                    container[key] = new_node
+            elif isinstance(val, (dict, list)):
+                count += _walk_anchor_refs(val, old_node, new_node)
+    elif isinstance(container, list):
+        for i, val in enumerate(container):
+            if val is old_node:
+                count += 1
+                if new_node is not None:
+                    container[i] = new_node
+            elif isinstance(val, (dict, list)):
+                count += _walk_anchor_refs(val, old_node, new_node)
+    return count
+
+
+def get_settings() -> Dict[str, Any]:
+    """读取设置页数据：共享代理锚点、引用数量与 notify 配置"""
+    result = {
+        "config_exists": CONFIG_FILE.exists(),
+        "proxy": "",
+        "proxy_exists": False,
+        "proxy_key": None,
+        "proxy_anchor": None,
+        "proxy_refs": 0,
+        "notify": _default_notify_settings(),
+    }
+    if not result["config_exists"]:
+        return result
+
+    ry = _ruamel_yaml()
+    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        doc = ry.load(f)
+    if not doc:
+        return result
+
+    key, node, anchor = _find_shared_proxy(doc)
+    if node is not None:
+        result["proxy"] = str(node)
+        result["proxy_exists"] = True
+        result["proxy_key"] = key
+        result["proxy_anchor"] = anchor or "proxy"
+        if anchor:
+            result["proxy_refs"] = max(0, _walk_anchor_refs(doc, node) - 1)
+
+    notify = doc.get("notify") or {}
+    result["notify"]["on_failure"] = bool(notify.get("on_failure", True))
+    result["notify"]["on_success"] = bool(notify.get("on_success", False))
+    for section, fields in NOTIFY_FIELDS.items():
+        cfg = notify.get(section) or {}
+        for field in fields:
+            value = cfg.get(field)
+            if value is None:
+                continue
+            text = str(value)
+            if field in NOTIFY_BLOCK_FIELDS:
+                text = text.rstrip("\n")
+            result["notify"][section][field] = text
+    return result
+
+
+def validate_settings_payload(data: Dict[str, Any]) -> List[str]:
+    """校验设置页提交的数据，返回错误列表"""
+    errors: List[str] = []
+    if "proxy" in data and not isinstance(data["proxy"], str):
+        errors.append("共享代理地址格式无效")
+
+    notify = data.get("notify")
+    if notify is None:
+        return errors
+    if not isinstance(notify, dict):
+        return ["通知配置格式无效"]
+
+    webhook = notify.get("webhook") or {}
+    ntfy = notify.get("ntfy") or {}
+    if not isinstance(webhook, dict) or not isinstance(ntfy, dict):
+        return ["通知配置格式无效"]
+
+    for label, cfg in (("Webhook", webhook), ("NTFY", ntfy)):
+        url = str(cfg.get("url") or "").strip()
+        if url and not url.startswith(("http://", "https://")):
+            errors.append(f"{label} URL 必须以 http:// 或 https:// 开头")
+
+    method = str(webhook.get("method") or "POST").upper()
+    if method not in WEBHOOK_METHODS:
+        errors.append("Webhook 请求方法无效")
+    content_type = str(webhook.get("content_type") or "application/json")
+    if content_type not in WEBHOOK_CONTENT_TYPES:
+        errors.append("Webhook Content-Type 无效")
+    priority = str(ntfy.get("priority") or "3")
+    if priority not in ("1", "2", "3", "4", "5"):
+        errors.append("NTFY 优先级必须为 1-5")
+    return errors
+
+
+def save_settings(data: Dict[str, Any]) -> tuple[bool, str, int]:
+    """保存共享代理与通知配置，保留 YAML 锚点、别名和注释
+
+    Returns:
+        (success, message, proxy_refs)  proxy_refs 为共享代理被引用的任务数
+    """
+    from ruamel.yaml.comments import CommentedMap
+    from ruamel.yaml.scalarstring import (
+        DoubleQuotedScalarString,
+        LiteralScalarString,
+        ScalarString,
+    )
+
+    try:
+        ry = _ruamel_yaml()
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            doc = ry.load(f)
+        if not doc:
+            return False, "配置文件为空", 0
+
+        proxy_refs = 0
+        if "proxy" in data:
+            value = str(data["proxy"] or "").strip()
+            key, old_node, anchor = _find_shared_proxy(doc)
+            if old_node is not None and anchor:
+                # 保留原标量样式与锚点名，并把所有别名引用一起换成新节点
+                new_node = (
+                    type(old_node)(value)
+                    if isinstance(old_node, ScalarString)
+                    else DoubleQuotedScalarString(value)
+                )
+                new_node.yaml_set_anchor(anchor, always_dump=True)
+                proxy_refs = max(
+                    0, _walk_anchor_refs(doc, old_node, new_node) - 1
+                )
+            else:
+                # 配置中尚无锚点：新建 `proxy: &proxy ...` 定义
+                new_node = DoubleQuotedScalarString(value)
+                new_node.yaml_set_anchor(anchor or "proxy", always_dump=True)
+                doc[key or "proxy"] = new_node
+
+        notify_data = data.get("notify")
+        if isinstance(notify_data, dict):
+            notify = doc.get("notify")
+            if notify is None:
+                notify = CommentedMap()
+                doc["notify"] = notify
+
+            for flag in ("on_failure", "on_success"):
+                if flag in notify_data:
+                    notify[flag] = bool(notify_data[flag])
+
+            for section, fields in NOTIFY_FIELDS.items():
+                section_data = notify_data.get(section)
+                if not isinstance(section_data, dict):
+                    continue
+                cfg = notify.get(section)
+                if cfg is None:
+                    cfg = CommentedMap()
+                    notify[section] = cfg
+                for field in fields:
+                    if field not in section_data:
+                        continue
+                    text = str(section_data[field] or "")
+                    if field in NOTIFY_BLOCK_FIELDS:
+                        cfg[field] = LiteralScalarString(text.rstrip("\n") + "\n")
+                    else:
+                        cfg[field] = text
+
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            ry.dump(doc, f)
+        return True, "设置已保存", proxy_refs
+    except Exception as e:
+        log_error(f"保存设置失败: {e}")
+        return False, f"保存失败: {str(e)}", 0
+
+
 def validate_cron_expression(expr: str) -> Dict[str, Any]:
     """验证 cron 表达式并返回下次执行时间和调度说明
 
@@ -640,6 +910,49 @@ def index():
         "index.html",
         app_version=APP_VERSION,
         auth_enabled=bool(AUTH_TOKEN),
+    )
+
+
+@app.route("/settings")
+def settings_page():
+    """设置已改为首页弹窗，保留旧地址重定向避免书签失效"""
+    return redirect("/")
+
+
+@app.route("/api/settings", methods=["GET", "POST"])
+def api_settings():
+    """读取 / 保存共享代理地址与通知配置"""
+    if request.method == "GET":
+        try:
+            return jsonify({"success": True, "settings": get_settings()})
+        except Exception as e:
+            log_error(f"读取设置失败: {e}")
+            return jsonify({"success": False, "message": f"读取设置失败: {str(e)}"}), 500
+
+    data = request.get_json(silent=True) or {}
+    errors = validate_settings_payload(data)
+    if errors:
+        return jsonify({"success": False, "message": "；".join(errors)}), 400
+
+    ok, message, proxy_refs = save_settings(data)
+    if not ok:
+        return jsonify({"success": False, "message": message}), 500
+
+    # 代理值写入后需重新生成 .env / crontab，让任务在下一次执行时使用新地址
+    reloaded, reload_msg = perform_reload()
+    if reloaded:
+        log_success("[WebUI] 设置已保存并重载配置")
+    else:
+        log_warning(f"[WebUI] 设置已保存，但重载失败: {reload_msg}")
+
+    return jsonify(
+        {
+            "success": True,
+            "message": message,
+            "proxy_refs": proxy_refs,
+            "reloaded": reloaded,
+            "reload_message": reload_msg,
+        }
     )
 
 

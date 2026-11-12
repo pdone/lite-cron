@@ -132,7 +132,8 @@ def _parse_headers(headers_str: str) -> Dict:
     parsed = {}
     for line in headers_str.split("\n"):
         line = line.strip()
-        if not line:
+        # 空行与 # 开头的示例/注释行不参与请求头解析
+        if not line or line.startswith("#"):
             continue
         i = line.find(":")
         if i == -1:

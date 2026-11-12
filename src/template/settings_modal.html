@@ -1,0 +1,163 @@
+<!-- 设置弹窗片段：由 index.html 通过 include 引入 -->
+<div class="modal" id="settings-modal">
+    <div class="modal-overlay" aria-hidden="true"></div>
+    <div class="modal-content modal-lg settings-modal-content" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i data-lucide="settings" class="title-icon"></i>
+                设置
+            </h3>
+            <div class="modal-actions">
+                <button class="btn btn-sm btn-secondary" id="btn-settings-maximize" title="最大化">
+                    <i data-lucide="maximize-2" class="btn-icon"></i>
+                </button>
+                <button class="modal-close" id="settings-modal-close" aria-label="关闭">&times;</button>
+            </div>
+        </div>
+
+        <div class="modal-body settings-modal-body">
+            <section class="settings-block">
+                <div class="settings-block-title">
+                    <i data-lucide="eye-off" class="inline-icon"></i> 显示设置
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-title">隐藏已禁用的任务</div>
+                        <div class="setting-desc">开启后，任务列表不再展示已禁用的任务。此偏好记录在当前浏览器（localStorage），刷新或重新打开页面仍然生效。</div>
+                    </div>
+                    <label class="switch hide-disabled-switch" for="hide-disabled-tasks" title="启用后列表中不再展示已禁用的任务">
+                        <input type="checkbox" id="hide-disabled-tasks" role="switch" />
+                        <span class="switch-track"></span>
+                        <span class="switch-label">隐藏已禁用</span>
+                    </label>
+                </div>
+            </section>
+
+            <section class="settings-block">
+                <div class="settings-block-title">
+                    <i data-lucide="globe" class="inline-icon"></i> 共享代理地址
+                    <span class="settings-badge" id="proxy-refs">-</span>
+                </div>
+                <div class="form-field">
+                    <label class="form-field-label" for="proxy">代理地址</label>
+                    <input type="text" id="proxy" class="form-control mono" placeholder="http://127.0.0.1:7890" autocomplete="off" />
+                    <span class="form-field-hint">对应 config.yml 顶部的 <code>proxy: &amp;proxy</code> 锚点；修改后所有任务 env 中的 <code>*proxy</code> 引用同步生效。</span>
+                </div>
+                <div class="settings-note">
+                    <i data-lucide="info" class="inline-icon"></i>
+                    保存后会自动重新生成 .env 并重载 cron 调度，注释与 YAML 锚点保持不变。
+                </div>
+            </section>
+
+            <section class="settings-block">
+                <div class="settings-block-title">
+                    <i data-lucide="bell" class="inline-icon"></i> 通知配置
+                </div>
+                <form id="settings-form" class="edit-form" autocomplete="off">
+                    <div class="settings-switches">
+                        <label class="switch" for="notify-on-failure">
+                            <input type="checkbox" id="notify-on-failure" role="switch" />
+                            <span class="switch-track"></span>
+                            <span class="switch-label">任务失败时通知</span>
+                        </label>
+                        <label class="switch" for="notify-on-success">
+                            <input type="checkbox" id="notify-on-success" role="switch" />
+                            <span class="switch-track"></span>
+                            <span class="switch-label">任务成功时通知</span>
+                        </label>
+                    </div>
+
+                    <div class="settings-section-title">
+                        <i data-lucide="send" class="inline-icon"></i> Webhook
+                    </div>
+                    <div class="masonry-grid">
+                        <div class="form-field">
+                            <label class="form-field-label" for="webhook-url">Webhook URL</label>
+                            <input type="text" id="webhook-url" class="form-control mono" placeholder="https://example.com/webhook" />
+                            <span class="form-field-hint">留空表示不启用 Webhook 通知，支持 $title / $content 变量</span>
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="webhook-method">请求方法</label>
+                            <select id="webhook-method" class="form-control">
+                                <option value="POST">POST</option>
+                                <option value="GET">GET</option>
+                                <option value="PUT">PUT</option>
+                                <option value="PATCH">PATCH</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="webhook-content-type">Content-Type</label>
+                            <select id="webhook-content-type" class="form-control">
+                                <option value="application/json">application/json</option>
+                                <option value="application/x-www-form-urlencoded">application/x-www-form-urlencoded</option>
+                                <option value="text/plain">text/plain</option>
+                                <option value="text/markdown">text/markdown</option>
+                            </select>
+                        </div>
+                        <div class="form-field span-2">
+                            <label class="form-field-label" for="webhook-headers">自定义请求头</label>
+                            <textarea id="webhook-headers" class="form-control mono settings-textarea" rows="4" placeholder="Authorization: Bearer your_token_here"></textarea>
+                            <span class="form-field-hint">每行一个 <code>Key: Value</code>，以 # 开头的行会被忽略</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-section-title">
+                        <i data-lucide="message-square" class="inline-icon"></i> NTFY
+                    </div>
+                    <div class="masonry-grid">
+                        <div class="form-field">
+                            <label class="form-field-label" for="ntfy-url">服务器地址</label>
+                            <input type="text" id="ntfy-url" class="form-control mono" placeholder="https://ntfy.sh" />
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="ntfy-topic">Topic</label>
+                            <input type="text" id="ntfy-topic" class="form-control mono" placeholder="mytopic" />
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="ntfy-priority">优先级</label>
+                            <select id="ntfy-priority" class="form-control">
+                                <option value="1">1 - 最低</option>
+                                <option value="2">2</option>
+                                <option value="3">3 - 默认</option>
+                                <option value="4">4</option>
+                                <option value="5">5 - 最高</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="ntfy-token">访问令牌</label>
+                            <input type="password" id="ntfy-token" class="form-control mono" placeholder="可选" />
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="ntfy-username">用户名</label>
+                            <input type="text" id="ntfy-username" class="form-control mono" placeholder="可选" />
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="ntfy-password">密码</label>
+                            <input type="password" id="ntfy-password" class="form-control mono" placeholder="可选" />
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field-label" for="ntfy-actions">自定义动作</label>
+                            <input type="text" id="ntfy-actions" class="form-control mono" placeholder="可选" />
+                        </div>
+                        <div class="form-field span-2">
+                            <label class="form-field-label" for="ntfy-headers">自定义请求头</label>
+                            <textarea id="ntfy-headers" class="form-control mono settings-textarea" rows="4" placeholder="X-Custom-Header: value"></textarea>
+                            <span class="form-field-hint">每行一个 <code>Key: Value</code>，以 # 开头的行会被忽略</span>
+                        </div>
+                    </div>
+                </form>
+            </section>
+        </div>
+
+        <div class="settings-footer">
+            <button type="button" class="btn btn-secondary" id="btn-reload-settings">
+                <i data-lucide="refresh-cw" class="btn-icon"></i>
+                重新读取
+            </button>
+            <button type="button" class="btn btn-primary" id="btn-save-settings">
+                <i data-lucide="save" class="btn-icon"></i>
+                保存设置
+            </button>
+        </div>
+    </div>
+</div>
