@@ -13,7 +13,7 @@
 
 **轻量级定时任务调度器**，基于 Docker 运行 Python 脚本。
 
-[English](./README_EN.md) | [中文](./README.md)
+[English](./README_EN.md) | [中文](./README.md) | [更新日志](./UPDATE.md)
 
 </div>
 

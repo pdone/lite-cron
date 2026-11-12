@@ -13,7 +13,7 @@
 
 **Lightweight Cron Job Scheduler**, run Python scripts with Docker.
 
-[English](./README_EN.md) | [中文](./README.md)
+[English](./README_EN.md) | [中文](./README.md) | [Changelog](./UPDATE_EN.md)
 
 </div>
 

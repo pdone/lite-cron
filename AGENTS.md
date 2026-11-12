@@ -371,6 +371,31 @@ python manage.py tasklogs      # Task execution logs
 - Commit message prefix 使用 `feat`、`fix`、`docs` 等，但 **`feat` 后不加冒号**
 - 示例：`feat 添加新功能`（正确），`feat: 添加新功能`（错误）
 
+## 更新日志维护
+
+根目录 `UPDATE.md`（中文）与 `UPDATE_EN.md`（英文）是面向使用者的更新日志，收录 `v1.6.0` 及之后的所有版本。
+
+- **发版必须同步追加**：每次修改 `src/VERSION` 发布新版本，都要在同一提交（或同一批次）内于两份文件顶部追加对应版本小节，不允许事后补记
+- **小节结构**：`## v<版本号>` 标题，下分 `### 新增` / `### 改进` / `### 修复`（英文为 `### Added` / `### Changed` / `### Fixed`），条目用 `- ` 列表
+- **空分类省略**：某版本没有某类变更时省略该分类标题，不保留空小节
+- **顺序固定**：新增 → 改进 → 修复；版本按由新到旧排列
+- **条目要求**：描述用户可感知的功能、行为或修复结果，不要写提交哈希，也不要写「修复一些问题」这类无法验证的表述
+- **中英对齐**：先写 `UPDATE.md`，再逐条翻译 `UPDATE_EN.md`，两份文件的版本数、版本顺序与每节条目数必须完全一致
+
+## 版本号约定
+
+`src/VERSION` 与 git tag 使用三段式 `主版本.次版本.修订号`，规则自 `v1.7.0` 起生效：
+
+- **主版本锁定**：第一位长期为 `1`，只有发生不兼容的大改才递增
+- **次版本**：引入用户可感知的新增功能时加 `1`，修订号归零
+- **修订号**：改进既有行为或修复缺陷时加 `1`
+- **纯文档不递增**：只改 `README*.md`、`UPDATE*.md`、`AGENTS.md` 等文档而不改 `src/` 运行时行为的提交，不动 `src/VERSION`，也不打 tag
+- **一个次版本只打一个 tag**：同一版本号可跨多个提交累积功能（例如任务脚本 + WebUI 功能），只在发布时打一次 tag；tag 名不带 `v` 前缀，更新日志小节标题带 `v`
+- **三处一致**：任一发布时刻，`src/VERSION`、tag 名与 `UPDATE*.md` 顶部小节标题指向同一版本号
+- **未发布可重编号**：只推过 tag、从未 Publish 过 Release 的版本（因此没有产出过镜像），可以重编号后重新发布
+- **历史不回溯**：`v1.6.x` 及更早版本按历史事实保留，即使当时新增功能走了修订号也不改
+- **只有 Publish Release 才会出镜像**：`.github/workflows/docker-publish.yml` 由 `release: [published]` 触发；推 tag 只会让 `.github/workflows/release.yml` 建一个草稿 Release，草稿状态下不会有任何镜像产出
+
 ## References
 
 - [Crontab Guru](https://crontab.guru/) - Cron expression validator
