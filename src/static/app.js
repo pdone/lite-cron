@@ -11,6 +11,7 @@ const state = {
     sortDirection: 'asc',
     hideDisabledTasks: false,
     theme: 'system',
+    langMode: typeof window !== 'undefined' && window.LANG_MODE ? window.LANG_MODE : 'system',
     currentLogFilename: null,
     currentLogGroups: [],
     currentLogFilter: 'all'
@@ -34,6 +35,48 @@ function taskHue(name) {
     return Math.round((hashString(name || 'task') * GOLDEN_ANGLE) % 360);
 }
 
+// ==================== 界面语言（服务端注入字典，切换后整页刷新） ====================
+// 字典由模板注入为 window.I18N：服务端已按当前语言合并补齐（缺翻项回落中文），
+// 因此这里不需要异步取字典，也没有「字典到位后再重绘」的过程。
+const LANG_COOKIE_NAME = 'litecron_lang';
+const LANG_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+function T(key, params) {
+    const catalog = window.I18N || {};
+    const text = catalog[key];
+    if (typeof text !== 'string') return key;
+    if (!params) return text;
+    return text.replace(/\{(\w+)\}/g, (match, name) =>
+        Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
+    );
+}
+
+/**
+ * 写语言偏好并刷新页面。
+ * 选「跟随系统」时清除 Cookie——「没选过」与「显式跟随系统」在服务端等价，
+ * 服务端据 Cookie 缺失走 Accept-Language 协商。
+ */
+function setLanguagePreference(mode) {
+    try {
+        const value = mode === 'system' ? '' : mode;
+        const maxAge = mode === 'system' ? 0 : LANG_COOKIE_MAX_AGE;
+        document.cookie = `${LANG_COOKIE_NAME}=${value}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
+    } catch (e) {
+        console.warn('保存语言偏好失败:', e);
+    }
+    // 整页刷新：静态骨架与已渲染的动态区块一次到位，不会出现半页翻译
+    window.location.reload();
+}
+
+function syncLangSegmented() {
+    if (!elements.langSegmented) return;
+    elements.langSegmented.querySelectorAll('.theme-segment').forEach((btn) => {
+        const active = btn.dataset.langValue === state.langMode;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+}
+
 const elements = {
     taskList: document.getElementById('task-list'),
     taskCount: document.getElementById('task-count'),
@@ -50,6 +93,7 @@ const elements = {
     settingsModalClose: document.getElementById('settings-modal-close'),
     hideDisabledToggle: document.getElementById('hide-disabled-tasks'),
     themeSegmented: document.getElementById('theme-segmented'),
+    langSegmented: document.getElementById('lang-segmented'),
     logsModal: document.getElementById('logs-modal'),
     runModal: document.getElementById('run-modal'),
     editModal: document.getElementById('edit-modal'),
@@ -348,13 +392,13 @@ function renderLogGroups(groups, filter) {
 
             const header = document.createElement('div');
             header.className = 'log-group-header';
-            header.innerHTML = `<i data-lucide="chevron-down" class="log-group-chevron"></i><span class="log-group-task-name">${escapeHtml(group.task)}</span><span class="log-group-line-count">${group.lines.length} 行</span>`;
+            header.innerHTML = `<i data-lucide="chevron-down" class="log-group-chevron"></i><span class="log-group-task-name">${escapeHtml(group.task)}</span><span class="log-group-line-count">${T('logs.group_lines', { n: group.lines.length })}</span>`;
             section.appendChild(header);
         } else {
             section.classList.add('log-group-system');
             const header = document.createElement('div');
             header.className = 'log-group-header';
-            header.innerHTML = `<i data-lucide="chevron-down" class="log-group-chevron"></i><span class="log-group-task-name">系统日志</span><span class="log-group-line-count">${group.lines.length} 行</span>`;
+            header.innerHTML = `<i data-lucide="chevron-down" class="log-group-chevron"></i><span class="log-group-task-name">${T('logs.group_system')}</span><span class="log-group-line-count">${T('logs.group_lines', { n: group.lines.length })}</span>`;
             section.appendChild(header);
         }
 
@@ -410,12 +454,12 @@ function renderTaskFilter(groups) {
 
     const label = document.createElement('span');
     label.className = 'log-filter-label';
-    label.textContent = '按任务筛选:';
+    label.textContent = T('logs.filter_label');
     container.appendChild(label);
 
     const btnAll = document.createElement('button');
     btnAll.className = 'log-filter-btn' + (state.currentLogFilter === 'all' ? ' active' : '');
-    btnAll.textContent = '全部';
+    btnAll.textContent = T('logs.filter_all');
     btnAll.onclick = () => {
         state.currentLogFilter = 'all';
         refreshLogView();
@@ -463,6 +507,8 @@ function init() {
     loadHideDisabledState();
     // 首屏主题已由 <head> 内联脚本应用，这里只把控件状态与存储值对齐
     applyTheme(loadThemePreference(), false);
+    // 语言控件状态取自服务端注入的 LANG_MODE，不回读 Cookie，避免两者不一致
+    syncLangSegmented();
     bindEvents();
     loadData(false);
 }
@@ -482,16 +528,16 @@ function bindEvents() {
     
     elements.btnEnableAll.addEventListener('click', () => {
         showConfirm({
-            title: '确认全部启用',
-            message: '确定要启用所有定时任务吗？',
+            title: T('tasks.batch.confirm_enable_title'),
+            message: T('tasks.batch.confirm_enable_message'),
             onConfirm: () => batchToggleTasks(true)
         });
     });
     
     elements.btnDisableAll.addEventListener('click', () => {
         showConfirm({
-            title: '确认全部禁用',
-            message: '确定要禁用所有定时任务吗？此操作将暂停所有定时任务的执行。',
+            title: T('tasks.batch.confirm_disable_title'),
+            message: T('tasks.batch.confirm_disable_message'),
             onConfirm: () => batchToggleTasks(false)
         });
     });
@@ -521,6 +567,17 @@ function bindEvents() {
         });
     }
 
+    // 语言切换：写 Cookie 后整页刷新，避免只有部分区域被翻译
+    if (elements.langSegmented) {
+        elements.langSegmented.addEventListener('click', (e) => {
+            const btn = e.target.closest('.theme-segment');
+            if (!btn) return;
+            const next = btn.dataset.langValue;
+            if (!next || next === state.langMode) return;
+            setLanguagePreference(next);
+        });
+    }
+
     // 「跟随系统」下操作系统主题变化：由 JS 重新解析并写入具体主题，
     // 与手动切换走同一条路径，因此过渡窗口与同步性完全一致
     if (THEME_DARK_QUERY) {
@@ -545,8 +602,8 @@ function bindEvents() {
 
     elements.btnClean.addEventListener('click', () => {
         showConfirm({
-            title: '确认清理日志',
-            message: '确定要清理超过 7 天的日志文件吗？此操作无法撤销。',
+            title: T('logs.confirm_clean_title'),
+            message: T('logs.confirm_clean_message'),
             onConfirm: cleanLogs
         });
     });
@@ -643,17 +700,17 @@ async function loadData(reload = false) {
                 if (reloadData.success) {
                     showToast(reloadData.message, 'success');
                 } else {
-                    showToast(reloadData.message || '配置重载失败', 'warning');
+                    showToast(reloadData.message || T('tasks.reload_failed'), 'warning');
                 }
             } catch (reloadError) {
                 console.error('重载配置失败:', reloadError);
-                showToast('重载配置失败', 'error');
+                showToast(T('tasks.reload_failed'), 'error');
             }
         }
         await loadTasks();
     } catch (error) {
         console.error('加载数据失败:', error);
-        showToast('加载数据失败', 'error');
+        showToast(T('tasks.load_failed'), 'error');
     }
 }
 
@@ -663,7 +720,7 @@ async function loadTasks() {
             <tr class="loading-row">
                 <td colspan="6" class="loading-cell">
                     <div class="spinner"></div>
-                    <span>加载中...</span>
+                    <span>${T('common.loading')}</span>
                 </td>
             </tr>
         `;
@@ -691,8 +748,8 @@ async function loadTasks() {
                 <tr>
                     <td colspan="6" class="empty-state">
                         <i data-lucide="list-checks" class="empty-icon"></i>
-                        <div class="empty-text">未找到 config.yml 配置文件</div>
-                        <div class="empty-subtext">请创建 config.yml 文件并重新加载</div>
+                        <div class="empty-text">${T('tasks.config_missing')}</div>
+                        <div class="empty-subtext">${T('tasks.config_missing_hint')}</div>
                     </td>
                 </tr>
             `;
@@ -709,10 +766,10 @@ async function loadTasks() {
             <tr>
                 <td colspan="6" class="empty-state">
                     <i data-lucide="alert-triangle" class="empty-icon"></i>
-                    <div class="empty-text">加载任务失败: ${error.message}</div>
+                    <div class="empty-text">${T('tasks.load_failed_row', { message: error.message })}</div>
                     <div class="empty-subtext">
                         <button onclick="loadTasks()" class="btn btn-secondary" style="margin-top: 12px;">
-                            <i data-lucide="refresh-cw" class="btn-icon"></i> 重试
+                            <i data-lucide="refresh-cw" class="btn-icon"></i> ${T('common.retry')}
                         </button>
                     </div>
                 </td>
@@ -785,17 +842,17 @@ function renderTasks() {
         const emptyHtml = hiddenCount > 0
             ? `
                 <i data-lucide="eye-off" class="empty-icon"></i>
-                <div class="empty-text">已隐藏 ${hiddenCount} 个禁用任务</div>
+                <div class="empty-text">${T('tasks.empty_hidden', { n: hiddenCount })}</div>
                 <div class="empty-subtext">
                     <button onclick="setHideDisabledTasks(false)" class="btn btn-secondary" style="margin-top: 12px;">
-                        <i data-lucide="eye" class="btn-icon"></i> 显示全部
+                        <i data-lucide="eye" class="btn-icon"></i> ${T('tasks.show_all')}
                     </button>
                 </div>
               `
             : `
                 <i data-lucide="list-checks" class="empty-icon"></i>
-                <div class="empty-text">暂无配置的任务</div>
-                <div class="empty-subtext">在 config.yml 中添加任务配置</div>
+                <div class="empty-text">${T('tasks.empty')}</div>
+                <div class="empty-subtext">${T('tasks.empty_hint')}</div>
               `;
 
         elements.taskList.innerHTML = `
@@ -815,7 +872,7 @@ function renderTasks() {
             <td>
                 <span class="task-status ${task.enabled ? 'enabled' : 'disabled'}">
                     <span class="status-dot"></span>
-                    ${task.enabled ? '启用' : '禁用'}
+                    ${task.enabled ? T('tasks.status.enabled') : T('tasks.status.disabled')}
                 </span>
             </td>
             <td>
@@ -842,18 +899,18 @@ function renderTasks() {
                     <button class="btn-action btn-run"
                             onclick="runTask('${task.name}')"
                             ${!task.enabled ? 'disabled' : ''}
-                            title="立即执行">
-                        <i data-lucide="play" class="btn-action-icon"></i> 执行
+                            title="${T('tasks.action.run_title')}">
+                        <i data-lucide="play" class="btn-action-icon"></i> ${T('tasks.action.run')}
                     </button>
                     <button class="btn-action btn-toggle ${task.enabled ? 'disable' : 'enable'}"
                             onclick="toggleTask('${task.name}', ${!task.enabled})"
-                            title="${task.enabled ? '禁用' : '启用'}">
-                        ${task.enabled ? '<i data-lucide="pause" class="btn-action-icon"></i> 禁用' : '<i data-lucide="play" class="btn-action-icon"></i> 启用'}
+                            title="${task.enabled ? T('tasks.action.disable') : T('tasks.action.enable')}">
+                        ${task.enabled ? `<i data-lucide="pause" class="btn-action-icon"></i> ${T('tasks.action.disable')}` : `<i data-lucide="play" class="btn-action-icon"></i> ${T('tasks.action.enable')}`}
                     </button>
                     <button class="btn-action btn-edit"
                             onclick="editTask('${task.name}')"
-                            title="编辑任务">
-                        <i data-lucide="pencil" class="btn-action-icon"></i> 编辑
+                            title="${T('tasks.action.edit_title')}">
+                        <i data-lucide="pencil" class="btn-action-icon"></i> ${T('tasks.action.edit')}
                     </button>
                 </div>
             </td>
@@ -867,20 +924,20 @@ function renderTasks() {
                     <span class="mobile-task-name">${task.name}</span>
                     <span class="mobile-task-status ${task.enabled ? 'enabled' : 'disabled'}">
                         <span class="mobile-task-status-dot"></span>
-                        ${task.enabled ? '启用' : '禁用'}
+                        ${task.enabled ? T('tasks.status.enabled') : T('tasks.status.disabled')}
                     </span>
                 </div>
                 <div class="mobile-task-info">
                     <div class="mobile-task-info-item">
-                        <span class="mobile-task-info-label">调度</span>
+                        <span class="mobile-task-info-label">${T('tasks.mobile.schedule')}</span>
                         <span class="mobile-task-info-value mono">${task.schedule}</span>
                     </div>
                     <div class="mobile-task-info-item">
-                        <span class="mobile-task-info-label">描述</span>
+                        <span class="mobile-task-info-label">${T('tasks.mobile.description')}</span>
                         <span class="mobile-task-info-value">${task.description || '-'}</span>
                     </div>
                     <div class="mobile-task-info-item">
-                        <span class="mobile-task-info-label">下次</span>
+                        <span class="mobile-task-info-label">${T('tasks.mobile.next')}</span>
                         <span class="mobile-task-info-value">${task.next_run || '-'}</span>
                     </div>
                 </div>
@@ -888,18 +945,18 @@ function renderTasks() {
                     <button class="btn-action btn-run"
                             onclick="runTask('${task.name}')"
                             ${!task.enabled ? 'disabled' : ''}
-                            title="立即执行">
-                        <i data-lucide="play" class="btn-action-icon"></i> 执行
+                            title="${T('tasks.action.run_title')}">
+                        <i data-lucide="play" class="btn-action-icon"></i> ${T('tasks.action.run')}
                     </button>
                     <button class="btn-action btn-toggle ${task.enabled ? 'disable' : 'enable'}"
                             onclick="toggleTask('${task.name}', ${!task.enabled})"
-                            title="${task.enabled ? '禁用' : '启用'}">
-                        ${task.enabled ? '<i data-lucide="pause" class="btn-action-icon"></i> 禁用' : '<i data-lucide="play" class="btn-action-icon"></i> 启用'}
+                            title="${task.enabled ? T('tasks.action.disable') : T('tasks.action.enable')}">
+                        ${task.enabled ? `<i data-lucide="pause" class="btn-action-icon"></i> ${T('tasks.action.disable')}` : `<i data-lucide="play" class="btn-action-icon"></i> ${T('tasks.action.enable')}`}
                     </button>
                     <button class="btn-action btn-edit"
                             onclick="editTask('${task.name}')"
-                            title="编辑任务">
-                        <i data-lucide="pencil" class="btn-action-icon"></i> 编辑
+                            title="${T('tasks.action.edit_title')}">
+                        <i data-lucide="pencil" class="btn-action-icon"></i> ${T('tasks.action.edit')}
                     </button>
                 </div>
             </div>
@@ -912,8 +969,8 @@ async function runTask(taskName) {
     
     state.isRunning = true;
     elements.runTaskName.textContent = taskName;
-    elements.runStatus.textContent = '准备执行...';
-    elements.terminal.innerHTML = '<div class="terminal-line system">等待开始...</div>';
+    elements.runStatus.textContent = T('run.preparing');
+    elements.terminal.innerHTML = `<div class="terminal-line system">${T('run.waiting')}</div>`;
     
     openModal('run');
     
@@ -945,8 +1002,8 @@ async function runTask(taskName) {
         }
         
     } catch (error) {
-        appendTerminal(elements.terminal, `执行出错: ${error.message}`, 'error');
-        showToast('执行失败', 'error');
+        appendTerminal(elements.terminal, T('run.error_prefix', { message: error.message }), 'error');
+        showToast(T('run.toast_request_failed'), 'error');
     } finally {
         state.isRunning = false;
     }
@@ -956,23 +1013,23 @@ function handleRunOutput(data) {
     if (data.status === 'started') {
         elements.terminal.innerHTML = '';
         appendTerminal(elements.terminal, data.message, 'system');
-        elements.runStatus.textContent = '执行中...';
+        elements.runStatus.textContent = T('run.running');
     } else if (data.status === 'running') {
         appendTerminal(elements.terminal, data.output);
         elements.terminal.scrollTop = elements.terminal.scrollHeight;
     } else if (data.status === 'completed') {
         const type = data.success ? 'success' : 'error';
         appendTerminal(elements.terminal, data.message, type);
-        elements.runStatus.textContent = data.success ? '执行完成' : '执行失败';
+        elements.runStatus.textContent = data.success ? T('run.completed') : T('run.failed');
         
         if (data.success) {
-            showToast('任务执行成功', 'success');
+            showToast(T('run.toast_success'), 'success');
         } else {
-            showToast('任务执行失败', 'error');
+            showToast(T('run.toast_failed'), 'error');
         }
     } else if (data.status === 'error') {
         appendTerminal(elements.terminal, data.message, 'error');
-        elements.runStatus.textContent = '执行出错';
+        elements.runStatus.textContent = T('run.error');
         showToast(data.message, 'error');
     }
 }
@@ -998,12 +1055,12 @@ async function toggleTask(taskName, enable) {
             showToast(data.message, 'success');
             loadTasks();
         } else {
-            showToast(data.message || '操作失败', 'error');
+            showToast(data.message || T('common.action_failed'), 'error');
         }
         
     } catch (error) {
         console.error('切换任务失败:', error);
-        showToast('操作失败', 'error');
+        showToast(T('common.action_failed'), 'error');
     }
 }
 
@@ -1011,7 +1068,7 @@ async function batchToggleTasks(enabled) {
     try {
         const btn = enabled ? elements.btnEnableAll : elements.btnDisableAll;
         btn.disabled = true;
-        btn.innerHTML = '<i data-lucide="loader-2" class="btn-icon"></i> 处理中...';
+        btn.innerHTML = `<i data-lucide="loader-2" class="btn-icon"></i> ${T('common.processing')}`;
         
         const response = await fetch('/api/tasks/batch/toggle', {
             method: 'POST',
@@ -1025,27 +1082,27 @@ async function batchToggleTasks(enabled) {
             showToast(data.message, 'success');
             loadTasks();
         } else {
-            showToast(data.message || '操作失败', 'error');
+            showToast(data.message || T('common.action_failed'), 'error');
         }
         
     } catch (error) {
         console.error('批量操作失败:', error);
-        showToast('操作失败', 'error');
+        showToast(T('common.action_failed'), 'error');
     } finally {
         const btn = enabled ? elements.btnEnableAll : elements.btnDisableAll;
         btn.disabled = false;
         btn.innerHTML = enabled 
-            ? '<i data-lucide="play" class="btn-icon"></i> 全部启用'
-            : '<i data-lucide="pause" class="btn-icon"></i> 全部禁用';
+            ? `<i data-lucide="play" class="btn-icon"></i> ${T('tasks.btn.enable_all')}`
+            : `<i data-lucide="pause" class="btn-icon"></i> ${T('tasks.btn.disable_all')}`;
         lucide.createIcons({ root: btn });
     }
 }
 
 async function loadLogs() {
-    elements.fileList.innerHTML = '<li class="file-item loading">加载中...</li>';
-    elements.logsViewer.innerHTML = '<div class="log-line" style="color: var(--text-muted); padding: 16px;">点击左侧文件查看内容</div>';
+    elements.fileList.innerHTML = `<li class="file-item loading">${T('common.loading')}</li>`;
+    elements.logsViewer.innerHTML = `<div class="log-line" style="color: var(--text-muted); padding: 16px;">${T('logs.click_file')}</div>`;
     elements.logsFilterContainer.innerHTML = '';
-    elements.currentFilename.textContent = '选择一个日志文件';
+    elements.currentFilename.textContent = T('logs.select_file');
     state.currentLogGroups = [];
     state.currentLogFilter = 'all';
     
@@ -1057,7 +1114,7 @@ async function loadLogs() {
         state.logs.sort((a, b) => b.modified.localeCompare(a.modified));
 
         if (state.logs.length === 0) {
-            elements.fileList.innerHTML = '<li class="file-item">暂无日志文件</li>';
+            elements.fileList.innerHTML = `<li class="file-item">${T('logs.none')}</li>`;
             return;
         }
         
@@ -1074,7 +1131,7 @@ async function loadLogs() {
         
     } catch (error) {
         console.error('加载日志失败:', error);
-        elements.fileList.innerHTML = '<li class="file-item">加载失败</li>';
+        elements.fileList.innerHTML = `<li class="file-item">${T('common.failed')}</li>`;
     }
 }
 
@@ -1084,7 +1141,7 @@ async function viewLog(filename, index) {
     });
     
     elements.currentFilename.textContent = filename;
-    elements.logsViewer.innerHTML = '<div class="log-line" style="color: var(--text-muted); padding: 16px;">加载中...</div>';
+    elements.logsViewer.innerHTML = `<div class="log-line" style="color: var(--text-muted); padding: 16px;">${T('common.loading')}</div>`;
     elements.logsFilterContainer.innerHTML = '';
     state.currentLogFilename = filename;
     state.currentLogFilter = 'all';
@@ -1102,7 +1159,7 @@ async function viewLog(filename, index) {
         
     } catch (error) {
         console.error('加载日志失败:', error);
-        elements.logsViewer.innerHTML = '<div class="log-line" style="color: var(--accent-danger); padding: 16px;">加载失败</div>';
+        elements.logsViewer.innerHTML = `<div class="log-line" style="color: var(--accent-danger); padding: 16px;">${T('common.failed')}</div>`;
         elements.logsFilterContainer.innerHTML = '';
     }
 }
@@ -1110,25 +1167,25 @@ async function viewLog(filename, index) {
 async function cleanLogs() {
     try {
         elements.btnClean.disabled = true;
-        elements.btnClean.innerHTML = '<i data-lucide="loader-2" class="btn-icon"></i> 清理中...';
+        elements.btnClean.innerHTML = `<i data-lucide="loader-2" class="btn-icon"></i> ${T('logs.cleaning')}`;
         
         const response = await fetch('/api/clean', { method: 'POST' });
         const data = await response.json();
         
         if (data.success) {
-            showToast('日志清理完成', 'success');
+            showToast(T('logs.cleaned'), 'success');
             closeModal('confirm');
             loadLogs();
         } else {
-            showToast(data.message || '清理失败', 'error');
+            showToast(data.message || T('logs.clean_failed'), 'error');
         }
         
     } catch (error) {
         console.error('清理失败:', error);
-        showToast('清理请求失败', 'error');
+        showToast(T('logs.clean_request_failed'), 'error');
     } finally {
         elements.btnClean.disabled = false;
-        elements.btnClean.innerHTML = '<i data-lucide="trash-2" class="btn-icon"></i> 清理日志';
+        elements.btnClean.innerHTML = `<i data-lucide="trash-2" class="btn-icon"></i> ${T('logs.btn.clean')}`;
     }
 }
 
@@ -1163,10 +1220,10 @@ function toggleMaximize(btn) {
     const btnIcon = btn.querySelector('.btn-icon');
     if (isMaximized) {
         btnIcon.setAttribute('data-lucide', 'minimize-2');
-        btn.title = '还原';
+        btn.title = T('common.restore');
     } else {
         btnIcon.setAttribute('data-lucide', 'maximize-2');
-        btn.title = '最大化';
+        btn.title = T('common.maximize');
     }
     lucide.createIcons({ root: btn });
 }
@@ -1176,7 +1233,7 @@ let confirmCallback = null;
 function showConfirm(options) {
     const { title, message, onConfirm } = options;
     
-    elements.confirmTitle.textContent = title || '确认操作';
+    elements.confirmTitle.textContent = title || T('common.confirm');
     elements.confirmMessage.textContent = message || '';
     confirmCallback = onConfirm;
     
@@ -1238,16 +1295,16 @@ async function editTask(taskName) {
     // 打开模态并加载任务数据
     openModal('edit');
     resetEditForm();
-    setHint(elements.editNameHint, '加载中...', 'info');
+    setHint(elements.editNameHint, T('edit.loading'), 'info');
     elements.editSave.disabled = true;
-    elements.editSave.innerHTML = '<i data-lucide="loader-2" class="btn-icon"></i> 加载中...';
+    elements.editSave.innerHTML = `<i data-lucide="loader-2" class="btn-icon"></i> ${T('edit.loading')}`;
     
     try {
         const response = await fetch(`/api/tasks/${encodeURIComponent(taskName)}/detail`);
         const data = await response.json();
         
         if (!data.success || !data.task) {
-            showToast(data.message || '加载任务失败', 'error');
+            showToast(data.message || T('edit.load_failed'), 'error');
             closeModal('edit');
             return;
         }
@@ -1275,14 +1332,14 @@ async function editTask(taskName) {
         
         setHint(elements.editNameHint, '', '');
         elements.editSave.disabled = false;
-        elements.editSave.innerHTML = '<i data-lucide="save" class="btn-icon"></i> 保存并重载';
+        elements.editSave.innerHTML = `<i data-lucide="save" class="btn-icon"></i> ${T('edit.save')}`;
         
         // 触发实时校验预览
         validateCronRealtime();
         validateScriptRealtime();
     } catch (error) {
         console.error('加载任务详情失败:', error);
-        showToast('加载任务详情失败', 'error');
+        showToast(T('edit.detail_failed'), 'error');
         closeModal('edit');
     }
 }
@@ -1316,11 +1373,11 @@ function addEnvRow(key = '', value = '', isAlias = false, aliasTarget = null) {
         row.classList.add('env-row-alias');
         // 别名键：键名可改但会破坏引用（仅提示），值只读
         valueInput.readOnly = true;
-        valueInput.title = `共享变量（引用锚点 ${aliasTarget}），值在多处共享，不可直接编辑`;
+        valueInput.title = T('edit.alias_value_title', { anchor: aliasTarget });
         const badge = document.createElement('span');
         badge.className = 'env-alias-badge';
         badge.innerHTML = `<i data-lucide="link" style="width: 12px; height: 12px; margin-right: 2px;"></i> ${aliasTarget}`;
-        badge.title = '此值通过 YAML 锚点引用共享，编辑会改为字面量';
+        badge.title = T('edit.alias_badge_title');
         row.querySelector('.env-key-col').appendChild(badge);
     }
     
@@ -1373,7 +1430,7 @@ async function validateCronRealtime() {
             elements.cronPreview.hidden = true;
         }
     } catch (error) {
-        setHint(elements.editScheduleHint, '校验请求失败', 'error');
+        setHint(elements.editScheduleHint, T('edit.validate_request_failed'), 'error');
         elements.cronPreview.hidden = true;
     }
 }
@@ -1403,7 +1460,7 @@ async function validateScriptRealtime() {
             setHint(elements.editScriptHint, `✗ ${data.error}`, 'error');
         }
     } catch (error) {
-        setHint(elements.editScriptHint, '校验请求失败', 'error');
+        setHint(elements.editScriptHint, T('edit.validate_request_failed'), 'error');
     }
 }
 
@@ -1424,11 +1481,11 @@ function validateNameRealtime() {
     if (duplicate && !isOwnName) {
         elements.editName.classList.remove('valid');
         elements.editName.classList.add('invalid');
-        setHint(elements.editNameHint, '✗ 名称已被其他任务占用', 'error');
+        setHint(elements.editNameHint, T('edit.name_taken'), 'error');
     } else {
         elements.editName.classList.remove('invalid');
         elements.editName.classList.add('valid');
-        setHint(elements.editNameHint, '✓ 名称可用', 'success');
+        setHint(elements.editNameHint, T('edit.name_ok'), 'success');
     }
 }
 
@@ -1460,28 +1517,28 @@ async function saveTaskEdit() {
     
     // 客户端预校验（服务端也会再校验一次）
     const clientErrors = [];
-    if (!data.name) clientErrors.push('任务名称不能为空');
-    if (!data.schedule) clientErrors.push('调度规则不能为空');
-    if (!data.script) clientErrors.push('脚本路径不能为空');
+    if (!data.name) clientErrors.push(T('edit.err_name'));
+    if (!data.schedule) clientErrors.push(T('edit.err_schedule'));
+    if (!data.script) clientErrors.push(T('edit.err_script'));
     
     // 重复键校验
     const seenKeys = new Set();
     for (const item of data.env) {
         if (seenKeys.has(item.key)) {
-            clientErrors.push(`环境变量键名重复: ${item.key}`);
+            clientErrors.push(T('edit.err_dup_env', { key: item.key }));
         }
         seenKeys.add(item.key);
     }
     
     if (clientErrors.length > 0) {
-        showToast(clientErrors.join('；'), 'error');
+        showToast(clientErrors.join(T('common.error_sep')), 'error');
         return;
     }
     
     editState.isSaving = true;
     const originalContent = elements.editSave.innerHTML;
     elements.editSave.disabled = true;
-    elements.editSave.innerHTML = '<i data-lucide="loader-2" class="btn-icon"></i> 保存中...';
+    elements.editSave.innerHTML = `<i data-lucide="loader-2" class="btn-icon"></i> ${T('edit.saving')}`;
     
     try {
         const response = await fetch(`/api/tasks/${encodeURIComponent(editState.originalName)}/edit`, {
@@ -1493,17 +1550,17 @@ async function saveTaskEdit() {
         
         if (result.success) {
             const reloadNote = result.reloaded
-                ? '，配置已重载生效'
-                : `（重载失败: ${result.reload_message || ''}）`;
+                ? T('edit.reloaded_note')
+                : T('edit.reload_failed_note', { message: result.reload_message || '' });
             showToast(`${result.message}${reloadNote}`, result.reloaded ? 'success' : 'warning', 4000);
             closeModal('edit');
             loadTasks();
         } else {
-            showToast(result.message || '保存失败', 'error', 5000);
+            showToast(result.message || T('edit.save_failed'), 'error', 5000);
         }
     } catch (error) {
         console.error('保存任务失败:', error);
-        showToast('保存请求失败', 'error');
+        showToast(T('edit.save_request_failed'), 'error');
     } finally {
         editState.isSaving = false;
         elements.editSave.disabled = false;

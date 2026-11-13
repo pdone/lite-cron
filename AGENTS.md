@@ -351,6 +351,20 @@ python manage.py restart       # No rebuild needed - config is volume-mounted
   - 任务标签 `[TASK:...]` 靠自定义属性继承取色，不需要内联样式。
 - 改动静态资源后记得递增模板里的 `?v=` 版本号。
 
+### 界面语言（跟随系统 / 简体中文 / English）
+
+- **偏好存 Cookie** `litecron_lang`，取值仅 `zh-CN` / `en`；缺失即「跟随系统」，选「跟随系统」时**清除** Cookie。不进 `config.yml`、不进 `/api/settings`、不随注销清空。
+- **服务端解析**：`src/i18n.py` 在 `before_request` 里先于鉴权拦截解析 `Accept-Language`（`zh*` → `zh-CN`，其它 → `en`），因此模板渲染出来就是目标语言，首页与登录页首屏不会闪中文。
+- **一份字典两个消费者**：`src/locales/zh_cn.py` / `en.py` 各导出扁平 `MESSAGES`（点分层级 key）。
+  - 后端与模板：`i18n.t("key", name=...)` / `{{ _('key') }}`。
+  - 前端：模板注入 `window.I18N`（服务端已按当前语言合并补齐），用 `T('key', {name})`；**不要**另建前端 json 字典。
+  - 含内联标记的文案以 `_html` 结尾，模板里用 `|safe` 渲染。
+  - 两份字典 key 集合必须一致：`i18n.py` 导入时比对，不一致只 `log_error` 不抛异常；缺翻回退中文，再缺返回 key 本身。**新增文案必须同时补两种语言。**
+- **切换语言 = 写 Cookie + `location.reload()`**：不做原地替换。静态骨架与动态区块（任务表、日志外壳、`schedule_desc`）一次到位，避免半页翻译。
+- **不翻译**：任务日志正文（任务脚本自身输出）、任务名 / 描述 / env 值、`config.yml` 注释、通知正文、`UPDATE*.md` 等文档。日志查看器只翻外壳（文件列表、筛选、`系统日志` 分组名），`[TASK:...]` 标签与正文原样输出。
+- 语言控件复用 `.theme-segmented` 样式（`#lang-segmented`，按钮 `data-lang-value`），顺序固定 `跟随系统 / 简体中文 / English`。
+- 新增或修改文案后同样记得递增模板里的 `?v=`。
+
 ## Common Pitfalls
 
 1. **Forgetting logger import**: Tasks MUST use `from logger import ...`, not standard `logging`
@@ -358,6 +372,7 @@ python manage.py restart       # No rebuild needed - config is volume-mounted
 3. **Path confusion**: Scripts run in `/app/` inside container, not project root
 4. **Missing rebuild**: New pip packages require `python manage.py build`
 5. **Config changes**: Editing `config.yml` only needs `restart`, not `build`
+6. **Console encoding on Windows**: 容器内是 UTF-8，Windows 控制台是 GBK。`webapp.py` 与 `task_wrapper.py` 的父子进程管道已显式按 UTF-8 交换，`logger.print_safe()` 负责控制台兜底；新增直接 `print` 任务输出的位置请复用 `print_safe`，否则含 emoji 的日志会抛 `UnicodeEncodeError` 并让任务直接失败
 
 ## Testing
 

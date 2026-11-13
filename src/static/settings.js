@@ -57,12 +57,12 @@
 
     function updateProxyBadge(settings) {
         if (!settings.config_exists) {
-            elements.proxyRefs.textContent = '未找到 config.yml';
+            elements.proxyRefs.textContent = T('settings.badge_missing_config');
             return;
         }
         elements.proxyRefs.textContent = settings.proxy_exists
-            ? `${settings.proxy_refs} 处引用 · &${settings.proxy_anchor}`
-            : '未定义锚点，保存后创建';
+            ? T('settings.badge_refs', { n: settings.proxy_refs, anchor: settings.proxy_anchor })
+            : T('settings.badge_no_anchor');
     }
 
     function fillForm(settings) {
@@ -98,12 +98,12 @@
         const { webhook, ntfy } = payload.notify;
         for (const [label, url] of [['Webhook', webhook.url], ['NTFY', ntfy.url]]) {
             if (url.trim() && !/^https?:\/\//i.test(url.trim())) {
-                errors.push(`${label} URL 必须以 http:// 或 https:// 开头`);
+                errors.push(T('settings.err_url_scheme', { label }));
             }
         }
-        if (!WEBHOOK_METHODS.includes(webhook.method)) errors.push('Webhook 请求方法无效');
-        if (!WEBHOOK_CONTENT_TYPES.includes(webhook.content_type)) errors.push('Webhook Content-Type 无效');
-        if (!['1', '2', '3', '4', '5'].includes(ntfy.priority)) errors.push('NTFY 优先级必须为 1-5');
+        if (!WEBHOOK_METHODS.includes(webhook.method)) errors.push(T('settings.err_webhook_method'));
+        if (!WEBHOOK_CONTENT_TYPES.includes(webhook.content_type)) errors.push(T('settings.err_webhook_content_type'));
+        if (!['1', '2', '3', '4', '5'].includes(ntfy.priority)) errors.push(T('settings.err_ntfy_priority'));
         return errors;
     }
 
@@ -112,36 +112,36 @@
             const response = await fetch('/api/settings');
             const data = await response.json();
             if (!response.ok || !data.success) {
-                throw new Error(data.message || '读取设置失败');
+                throw new Error(data.message || T('settings.load_failed'));
             }
             fillForm(data.settings);
             elements.btnSave.disabled = !data.settings.config_exists;
             if (!data.settings.config_exists) {
-                showToast('未找到 config.yml，无法读取或保存配置', 'warning', 5000);
+                showToast(T('settings.not_found'), 'warning', 5000);
             } else if (notifySuccess) {
-                showToast('已重新读取配置', 'success');
+                showToast(T('settings.reloaded'), 'success');
             }
         } catch (error) {
             console.error('读取设置失败:', error);
-            showToast(`读取设置失败: ${error.message}`, 'error', 5000);
+            showToast(`${T('settings.load_failed')}: ${error.message}`, 'error', 5000);
         }
     }
 
     async function saveSettings() {
         if (!currentSettings || !currentSettings.config_exists) {
-            showToast('未找到 config.yml，无法保存配置', 'error');
+            showToast(T('settings.not_found_save'), 'error');
             return;
         }
         const payload = collectPayload();
         const errors = validatePayload(payload);
         if (errors.length > 0) {
-            showToast(errors.join('；'), 'error', 5000);
+            showToast(errors.join(T('common.error_sep')), 'error', 5000);
             return;
         }
 
         const originalHtml = elements.btnSave.innerHTML;
         elements.btnSave.disabled = true;
-        elements.btnSave.innerHTML = '<i data-lucide="loader-2" class="btn-icon"></i> 保存中...';
+        elements.btnSave.innerHTML = `<i data-lucide="loader-2" class="btn-icon"></i> ${T('common.saving')}`;
         if (window.lucide) lucide.createIcons({ root: elements.btnSave });
 
         try {
@@ -152,13 +152,13 @@
             });
             const data = await response.json();
             if (!response.ok || !data.success) {
-                throw new Error(data.message || '保存失败');
+                throw new Error(data.message || T('edit.save_failed'));
             }
 
             showToast(
                 data.reloaded
-                    ? '设置已保存，配置已重载'
-                    : `设置已保存（重载失败: ${data.reload_message || '未知原因'}）`,
+                    ? T('settings.save_ok')
+                    : T('settings.save_ok_reload_failed', { message: data.reload_message || '' }),
                 data.reloaded ? 'success' : 'warning',
                 4500
             );
@@ -169,7 +169,7 @@
             }
         } catch (error) {
             console.error('保存设置失败:', error);
-            showToast(`保存设置失败: ${error.message}`, 'error', 5000);
+            showToast(`${T('settings.save_failed')}: ${error.message}`, 'error', 5000);
         } finally {
             elements.btnSave.disabled = false;
             elements.btnSave.innerHTML = originalHtml;

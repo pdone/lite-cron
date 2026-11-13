@@ -617,6 +617,8 @@ body::before {
     text-decoration: none;
     position: relative;
     overflow: hidden;
+    /* 英文文案多词（如 Reload Config），按钮内不折行，避免按钮被撑成两行 */
+    white-space: nowrap;
 }
 
 .btn::before {

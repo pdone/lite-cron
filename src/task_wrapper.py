@@ -12,7 +12,7 @@ from pathlib import Path
 # 导入日志模块 - 使用当前文件所在目录
 APP_DIR = str(Path(__file__).parent)
 sys.path.insert(0, APP_DIR)
-from logger import log_info, log_debug, log_error, log_warning
+from logger import log_info, log_debug, log_error, log_warning, print_safe
 
 
 def setup_task_env(task_name: str) -> dict:
@@ -128,11 +128,16 @@ def main():
     # 传递 LITECRON_TASK_NAME 给子进程，使脚本内日志也能带任务名
     child_env = os.environ.copy()
     child_env["LITECRON_TASK_NAME"] = task_name
+    # 与子进程统一按 UTF-8 交换输出：否则 Windows 上用 locale(GBK) 解码会
+    # 在遇到任务脚本的 emoji 时抛 UnicodeDecodeError，把整条执行链路打断
+    child_env["PYTHONIOENCODING"] = "utf-8"
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         bufsize=1,  # 行缓冲
         cwd=APP_DIR,
         env=child_env,
@@ -144,8 +149,8 @@ def main():
         for line in process.stdout:
             line = line.rstrip("\n")
             output_lines.append(line)
-            # 输出到 stdout（Docker 日志）
-            print(line, flush=True)
+            # 输出到 stdout（Docker 日志）；用 print_safe 防止窄编码控制台中断流程
+            print_safe(line)
 
     # 等待进程结束
     exit_code = process.wait()

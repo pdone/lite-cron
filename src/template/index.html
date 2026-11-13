@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="system">
+<html lang="{{ lang }}" data-theme="system">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,7 +19,7 @@
             }
         } catch (e) {}
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='15') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='16') }}">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
@@ -34,14 +34,14 @@
                     </div>
                 </div>
                 <div class="header-actions">
-                    <button class="btn btn-sm btn-secondary" id="btn-settings" title="设置">
+                    <button class="btn btn-sm btn-secondary" id="btn-settings" title="{{ _('header.settings') }}">
                         <i data-lucide="settings" class="btn-icon"></i>
-                        设置
+                        {{ _('header.settings') }}
                     </button>
                     {% if auth_enabled %}
-                    <button class="btn btn-sm btn-secondary" id="btn-logout" title="退出登录">
+                    <button class="btn btn-sm btn-secondary" id="btn-logout" title="{{ _('header.logout_title') }}">
                         <i data-lucide="log-out" class="btn-icon"></i>
-                        退出
+                        {{ _('header.logout') }}
                     </button>
                     {% endif %}
                 </div>
@@ -53,35 +53,35 @@
                 <div class="card-header">
                     <h2 class="card-title">
                         <i data-lucide="list-todo" class="title-icon"></i>
-                        定时任务
+                        {{ _('tasks.title') }}
                     </h2>
                     <div class="card-actions">
-                        <button class="btn btn-sm btn-secondary" id="btn-logs" title="查看日志">
+                        <button class="btn btn-sm btn-secondary" id="btn-logs" title="{{ _('tasks.btn.logs') }}">
                             <i data-lucide="search" class="btn-icon"></i>
-                            查看日志
+                            {{ _('tasks.btn.logs') }}
                         </button>
-                        <button class="btn btn-sm btn-secondary" id="btn-refresh" title="重载配置">
+                        <button class="btn btn-sm btn-secondary" id="btn-refresh" title="{{ _('tasks.btn.reload') }}">
                             <i data-lucide="refresh-cw" class="btn-icon"></i>
-                            重载配置
+                            {{ _('tasks.btn.reload') }}
                         </button>
-                        <button class="btn btn-sm btn-secondary" id="btn-enable-all" title="全部启用">
+                        <button class="btn btn-sm btn-secondary" id="btn-enable-all" title="{{ _('tasks.btn.enable_all') }}">
                             <i data-lucide="play" class="btn-icon"></i>
-                            全部启用
+                            {{ _('tasks.btn.enable_all') }}
                         </button>
-                        <button class="btn btn-sm btn-secondary" id="btn-disable-all" title="全部禁用">
+                        <button class="btn btn-sm btn-secondary" id="btn-disable-all" title="{{ _('tasks.btn.disable_all') }}">
                             <i data-lucide="pause" class="btn-icon"></i>
-                            全部禁用
+                            {{ _('tasks.btn.disable_all') }}
                         </button>
                     </div>
                     <div class="card-stats">
                         <span class="stat-badge stat-badge-success">
                             <span class="status-dot"></span>
                             <span class="stat-num" id="enabled-count">-</span>
-                            <span class="stat-text">启用</span>
+                            <span class="stat-text">{{ _('tasks.stat.enabled') }}</span>
                         </span>
                         <span class="stat-badge">
                             <span class="stat-num" id="task-count">-</span>
-                            <span class="stat-text">任务</span>
+                            <span class="stat-text">{{ _('tasks.stat.total') }}</span>
                         </span>
                     </div>
                 </div>
@@ -91,28 +91,28 @@
                             <thead>
                                 <tr>
                                     <th class="sortable" data-sort="enabled">
-                                        <span class="th-content">状态<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
+                                        <span class="th-content">{{ _('tasks.th.status') }}<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
                                     </th>
                                     <th class="sortable" data-sort="name">
-                                        <span class="th-content">任务名称<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
+                                        <span class="th-content">{{ _('tasks.th.name') }}<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
                                     </th>
                                     <th class="sortable" data-sort="schedule">
-                                        <span class="th-content">调度规则<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
+                                        <span class="th-content">{{ _('tasks.th.schedule') }}<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
                                     </th>
                                     <th class="sortable" data-sort="description">
-                                        <span class="th-content">描述<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
+                                        <span class="th-content">{{ _('tasks.th.description') }}<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
                                     </th>
                                     <th class="sortable" data-sort="next_run">
-                                        <span class="th-content">下次执行<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
+                                        <span class="th-content">{{ _('tasks.th.next_run') }}<i data-lucide="arrow-up-down" class="sort-icon"></i></span>
                                     </th>
-                                    <th class="col-actions">操作</th>
+                                    <th class="col-actions">{{ _('tasks.th.actions') }}</th>
                                 </tr>
                             </thead>
                             <tbody id="task-list">
                                 <tr class="loading-row">
                                     <td colspan="6" class="loading-cell">
                                         <div class="spinner"></div>
-                                        <span>加载中...</span>
+                                        <span>{{ _('common.loading') }}</span>
                                     </td>
                                 </tr>
                             </tbody>
@@ -124,7 +124,7 @@
         </main>
 
         <footer class="footer">
-            <p>LiteCron WebUI · <a href="https://github.com/pdone/lite-cron" target="_blank" rel="noopener noreferrer">项目主页</a></p>
+            <p>LiteCron WebUI · <a href="https://github.com/pdone/lite-cron" target="_blank" rel="noopener noreferrer">{{ _('footer.home') }}</a></p>
         </footer>
     </div>
 
@@ -134,33 +134,33 @@
             <div class="modal-header">
                 <h3 class="modal-title">
                     <i data-lucide="file-text" class="title-icon"></i>
-                    日志文件
+                    {{ _('logs.title') }}
                 </h3>
                 <div class="modal-actions">
-                    <button class="btn btn-sm btn-secondary" id="btn-clean" title="清理日志">
+                    <button class="btn btn-sm btn-secondary" id="btn-clean" title="{{ _('logs.btn.clean') }}">
                         <i data-lucide="trash-2" class="btn-icon"></i>
-                        清理日志
+                        {{ _('logs.btn.clean') }}
                     </button>
-                    <button class="btn btn-sm btn-secondary" id="btn-maximize" title="最大化">
+                    <button class="btn btn-sm btn-secondary" id="btn-maximize" title="{{ _('common.maximize') }}">
                         <i data-lucide="maximize-2" class="btn-icon"></i>
                     </button>
-                    <button class="modal-close" id="modal-close" aria-label="关闭">&times;</button>
+                    <button class="modal-close" id="modal-close" aria-label="{{ _('common.close') }}">&times;</button>
                 </div>
             </div>
             <div class="modal-body">
                 <div class="logs-layout">
                     <div class="logs-sidebar">
-                        <h4 class="sidebar-title">文件列表</h4>
+                        <h4 class="sidebar-title">{{ _('logs.sidebar') }}</h4>
                         <ul class="file-list" id="file-list">
-                            <li class="file-item loading">加载中...</li>
+                            <li class="file-item loading">{{ _('common.loading') }}</li>
                         </ul>
                     </div>
                     <div class="logs-content">
                         <div class="logs-toolbar">
-                            <span class="logs-filename" id="current-filename">选择一个日志文件</span>
+                            <span class="logs-filename" id="current-filename">{{ _('logs.select_file') }}</span>
                         </div>
                         <div class="logs-filter-container" id="logs-filter-container"></div>
-                        <pre class="logs-viewer" id="logs-viewer"><div class="log-line" style="color: var(--text-muted); padding: 16px;">点击左侧文件查看内容</div></pre>
+                        <pre class="logs-viewer" id="logs-viewer"><div class="log-line" style="color: var(--text-muted); padding: 16px;">{{ _('logs.click_file') }}</div></pre>
                     </div>
                 </div>
             </div>
@@ -173,17 +173,17 @@
             <div class="modal-header">
                 <h3 class="modal-title">
                     <i data-lucide="rocket" class="title-icon"></i>
-                    执行任务
+                    {{ _('run.title') }}
                 </h3>
-                <button class="modal-close" id="run-modal-close" aria-label="关闭">&times;</button>
+                <button class="modal-close" id="run-modal-close" aria-label="{{ _('common.close') }}">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="run-info">
                     <span class="run-task-name" id="run-task-name"></span>
-                    <span class="run-status" id="run-status">准备执行...</span>
+                    <span class="run-status" id="run-status">{{ _('run.preparing') }}</span>
                 </div>
                 <div class="terminal" id="terminal">
-                    <div class="terminal-line system">等待开始...</div>
+                    <div class="terminal-line system">{{ _('run.waiting') }}</div>
                 </div>
             </div>
         </div>
@@ -195,46 +195,46 @@
             <div class="modal-header">
                 <h3 class="modal-title">
                     <i data-lucide="pencil" class="title-icon"></i>
-                    编辑任务
+                    {{ _('edit.title') }}
                 </h3>
-                <button class="modal-close" id="edit-modal-close" aria-label="关闭">&times;</button>
+                <button class="modal-close" id="edit-modal-close" aria-label="{{ _('common.close') }}">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="edit-form" class="edit-form" autocomplete="off">
                     <div class="masonry-grid">
                         <div class="form-field">
                             <label class="form-field-label" for="edit-name">
-                                任务名称 <span class="required">*</span>
+                                {{ _('edit.name') }} <span class="required">*</span>
                             </label>
-                            <input type="text" id="edit-name" class="form-control" placeholder="如：Bilibili" />
+                            <input type="text" id="edit-name" class="form-control" placeholder="{{ _('edit.name_placeholder') }}" />
                             <span class="form-field-hint" id="edit-name-hint"></span>
                         </div>
                         <div class="form-field">
                             <label class="form-field-label" for="edit-description">
-                                任务描述
+                                {{ _('edit.description') }}
                             </label>
-                            <input type="text" id="edit-description" class="form-control" placeholder="如：Bilibili签到" />
+                            <input type="text" id="edit-description" class="form-control" placeholder="{{ _('edit.description_placeholder') }}" />
                         </div>
                         <div class="form-field">
                             <label class="form-field-label" for="edit-script">
-                                脚本文件路径 <span class="required">*</span>
+                                {{ _('edit.script') }} <span class="required">*</span>
                             </label>
                             <input type="text" id="edit-script" class="form-control mono" placeholder="tasks/v2ex.py" />
                             <span class="form-field-hint" id="edit-script-hint"></span>
                         </div>
                         <div class="form-field">
                             <label class="form-field-label" for="edit-schedule">
-                                调度规则 (Cron) <span class="required">*</span>
+                                {{ _('edit.schedule') }} <span class="required">*</span>
                             </label>
                             <input type="text" id="edit-schedule" class="form-control mono" placeholder="0 2 * * *" />
                             <span class="form-field-hint" id="edit-schedule-hint"></span>
                             <div class="cron-preview" id="cron-preview" hidden>
                                 <div class="cron-preview-item">
-                                    <span class="cron-preview-label"><i data-lucide="clock" class="inline-icon"></i> 下次执行</span>
+                                    <span class="cron-preview-label"><i data-lucide="clock" class="inline-icon"></i> {{ _('edit.next_run') }}</span>
                                     <span class="cron-preview-value mono" id="cron-next-run">-</span>
                                 </div>
                                 <div class="cron-preview-item">
-                                    <span class="cron-preview-label"><i data-lucide="info" class="inline-icon"></i> 规则说明</span>
+                                    <span class="cron-preview-label"><i data-lucide="info" class="inline-icon"></i> {{ _('edit.rule_desc') }}</span>
                                     <span class="cron-preview-value" id="cron-desc">-</span>
                                 </div>
                             </div>
@@ -243,13 +243,13 @@
 
                     <div class="form-field env-field">
                         <div class="env-field-header">
-                            <label class="form-field-label">环境变量</label>
+                            <label class="form-field-label">{{ _('edit.env') }}</label>
                             <button type="button" class="btn btn-sm btn-primary" id="btn-add-env">
                                 <span class="btn-icon">+</span>
-                                添加变量
+                                {{ _('edit.env_add') }}
                             </button>
                         </div>
-                        <div class="env-tip"><i data-lucide="link" class="inline-icon"></i> 标记为「共享变量」的条目引用了 YAML 锚点（如 <code>*proxy</code>），其值在多处共享。编辑值会改为字面量，删除则解除引用。</div>
+                        <div class="env-tip"><i data-lucide="link" class="inline-icon"></i> {{ _('edit.env_tip_html')|safe }}</div>
                         <div class="env-list" id="env-list"></div>
                         <template id="env-row-template">
                             <div class="env-row">
@@ -259,17 +259,17 @@
                                 <div class="env-value-col">
                                     <textarea class="env-value form-control mono" rows="1" placeholder="value"></textarea>
                                 </div>
-                                <button type="button" class="btn-icon-only env-remove" title="删除">&times;</button>
+                                <button type="button" class="btn-icon-only env-remove" title="{{ _('edit.env_remove') }}">&times;</button>
                             </div>
                         </template>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="edit-cancel">取消</button>
+                <button class="btn btn-secondary" id="edit-cancel">{{ _('edit.cancel') }}</button>
                 <button class="btn btn-primary" id="edit-save">
                     <i data-lucide="save" class="btn-icon"></i>
-                    保存并重载
+                    {{ _('edit.save') }}
                 </button>
             </div>
         </div>
@@ -283,26 +283,32 @@
             <div class="modal-header">
                 <h3 class="modal-title">
                     <i data-lucide="alert-triangle" class="title-icon"></i>
-                    确认操作
+                    {{ _('common.confirm') }}
                 </h3>
-                <button class="modal-close" id="confirm-modal-close" aria-label="关闭">&times;</button>
+                <button class="modal-close" id="confirm-modal-close" aria-label="{{ _('common.close') }}">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="confirm-icon"><i data-lucide="alert-triangle"></i></div>
-                <div class="confirm-title" id="confirm-title">确定要执行此操作吗？</div>
+                <div class="confirm-title" id="confirm-title">{{ _('common.confirm_default') }}</div>
                 <div class="confirm-message" id="confirm-message"></div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="confirm-cancel">取消</button>
-                <button class="btn btn-danger" id="confirm-ok">确认</button>
+                <button class="btn btn-secondary" id="confirm-cancel">{{ _('common.cancel') }}</button>
+                <button class="btn btn-danger" id="confirm-ok">{{ _('common.ok') }}</button>
             </div>
         </div>
     </div>
 
     {% include 'settings_modal.html' %}
 
-    <script src="{{ url_for('static', filename='app.js', v='12') }}"></script>
-    <script src="{{ url_for('static', filename='settings.js', v='3') }}"></script>
+    <!-- 界面语言字典：服务端已按当前语言合并补齐（缺翻项为中文），前端 T() 直接取用，
+         因此不需要额外的字典请求，也不会有「字典到位后再重绘一次」 -->
+    <script>
+        window.I18N = {{ i18n_catalog|tojson }};
+        window.LANG_MODE = {{ lang_mode|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='app.js', v='13') }}"></script>
+    <script src="{{ url_for('static', filename='settings.js', v='4') }}"></script>
     <script>
         lucide.createIcons();
     </script>

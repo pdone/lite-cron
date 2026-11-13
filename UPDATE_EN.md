@@ -4,6 +4,26 @@
 
 This file covers releases from `v1.6.0` onward; for earlier changes, refer to the git history and GitHub Releases.
 
+## v1.8.0
+
+### Added
+
+- New interface language switch in the WebUI (follow system / Simplified Chinese / English); it defaults to follow system and negotiates from the browser language (Chinese-family browsers get Simplified Chinese, everything else gets English)
+- Schedule descriptions in the task list and edit dialog now follow the interface language (e.g. `0 2 * * *` reads「0分 2时」in Chinese and `at 02:00` in English)
+- Result messages for saving settings, enabling/disabling tasks, cleaning logs and reloading the configuration, as well as the login error message, now follow the interface language
+
+### Changed
+
+- The language preference lives in a browser cookie (`litecron_lang`); it is not written to `config.yml`, survives signing out, and does not affect other devices
+- Switching the language reloads the page once, so the page shell, task list and log viewer all switch together with no half-translated screen
+- The home and login pages are rendered in the chosen language on first paint, with no flash of Chinese that is replaced afterwards; `<html lang>` follows the language as well
+- Entries missing a translation fall back to Simplified Chinese instead of exposing raw copy keys in the UI
+- Task log bodies, task names and descriptions, environment variable values, `config.yml` comments and notification bodies are left untouched
+
+### Fixed
+
+- Fixed tasks aborting on Windows (outside Docker) as soon as a log line contained an emoji: output is now exchanged as UTF-8 end to end, and console printing degrades gracefully instead of raising (this used to break `NodeSeek`, `FnClub` and others right after their first emoji log line)
+
 ## v1.7.1
 
 ### Changed

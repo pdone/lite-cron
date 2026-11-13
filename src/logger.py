@@ -34,6 +34,21 @@ LOG_FILE = os.path.join(LOG_DIR, f"{LOG_DATE}.log")
 
 _log_fallback_done = False
 
+
+def print_safe(text: str) -> None:
+    """输出到控制台，且不因终端编码而中断任务
+
+    Windows 控制台默认是 GBK(cp936)，直接 print 含 emoji 的行会抛
+    UnicodeEncodeError，让整个任务脚本异常退出（例如 🚀 / ✅ 这类日志前缀）。
+    日志不该成为失败原因，因此编码不支持时降级为可编码形式再输出。
+    """
+    try:
+        print(text, flush=True)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        print(text.encode(encoding, "replace").decode(encoding, "replace"), flush=True)
+
+
 # ============ 核心日志函数 ============
 
 def log(message: str, level: str = "INF") -> None:
@@ -58,7 +73,7 @@ def log(message: str, level: str = "INF") -> None:
 
     # 输出到控制台（flush=True 确保立即输出到 Docker logs）
     for line in lines:
-        print(f"{timestamp} [{level}]{task_part} {line}", flush=True)
+        print_safe(f"{timestamp} [{level}]{task_part} {line}")
     
     # 输出到文件
     try:

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="system">
+<html lang="{{ lang }}" data-theme="system">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LiteCron · 登录</title>
+    <title>{{ _('login.doc_title') }}</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,7 +17,7 @@
             }
         } catch (e) {}
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='15') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='16') }}">
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         .login-wrap {
@@ -106,29 +106,28 @@
                 <h1>LiteCron</h1>
             </div>
             <form class="login-form" method="POST" action="/login" autocomplete="off">
-                <label for="token">访问令牌</label>
+                <label for="token">{{ _('login.token') }}</label>
                 <input
                     type="password"
                     id="token"
                     name="token"
                     class="form-control mono"
-                    placeholder="输入访问令牌"
+                    placeholder="{{ _('login.placeholder') }}"
                     autofocus
                     required>
-                {% if error %}
+                {% if error_key %}
                 <div class="login-error">
                     <i data-lucide="alert-circle" class="inline-icon"></i>
-                    {{ error }}
+                    {{ _(error_key) }}
                 </div>
                 {% endif %}
                 <button type="submit" class="btn btn-primary login-btn">
                     <i data-lucide="log-in" class="btn-icon"></i>
-                    登录
+                    {{ _('login.button') }}
                 </button>
             </form>
             <div class="login-hint">
-                令牌由环境变量 <code>WEBUI_TOKEN</code><br>
-                或 <code>config.yml</code> 的 <code>webui.token</code> 配置
+                {{ _('login.hint_html')|safe }}
             </div>
         </div>
     </div>

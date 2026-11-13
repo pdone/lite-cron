@@ -5,7 +5,6 @@ LiteCron Web 管理界面
 提供任务管理、日志查看等功能
 """
 
-import locale
 import os
 import sys
 import subprocess
@@ -23,10 +22,14 @@ from flask import (
     send_from_directory,
     session,
     redirect,
+    stream_with_context,
 )
 
 # 导入日志模块
 from logger import log_info, log_success, log_error, log_warning
+
+# 界面语言：t()/resolve_language()/install() 等，详见 i18n.py
+import i18n
 
 # 项目路径配置 - 文件位于 /app/ 下
 PROJECT_ROOT = Path(__file__).parent.absolute()
@@ -57,6 +60,15 @@ APP_VERSION = get_app_version()
 
 app = Flask(__name__)
 app.template_folder = str(TEMPLATE_DIR)
+
+# 界面语言：注册 Jinja 全局 _() 与语言上下文（lang / lang_mode / i18n_catalog）
+i18n.install(app)
+
+
+@app.before_request
+def resolve_ui_language():
+    """解析界面语言，必须早于鉴权拦截注册：401 的提示语也要用请求语言。"""
+    i18n.init_request_language()
 
 # 鉴权配置（在 __main__ 启动时根据环境变量/config.yml 覆盖）
 # AUTH_TOKEN 为空表示鉴权关闭（此时应仅绑定 127.0.0.1 本地访问）
@@ -331,33 +343,33 @@ def validate_settings_payload(data: Dict[str, Any]) -> List[str]:
     """校验设置页提交的数据，返回错误列表"""
     errors: List[str] = []
     if "proxy" in data and not isinstance(data["proxy"], str):
-        errors.append("共享代理地址格式无效")
+        errors.append(i18n.t("settings.err_proxy_format"))
 
     notify = data.get("notify")
     if notify is None:
         return errors
     if not isinstance(notify, dict):
-        return ["通知配置格式无效"]
+        return [i18n.t("settings.err_notify_format")]
 
     webhook = notify.get("webhook") or {}
     ntfy = notify.get("ntfy") or {}
     if not isinstance(webhook, dict) or not isinstance(ntfy, dict):
-        return ["通知配置格式无效"]
+        return [i18n.t("settings.err_notify_format")]
 
     for label, cfg in (("Webhook", webhook), ("NTFY", ntfy)):
         url = str(cfg.get("url") or "").strip()
         if url and not url.startswith(("http://", "https://")):
-            errors.append(f"{label} URL 必须以 http:// 或 https:// 开头")
+            errors.append(i18n.t("settings.err_url_scheme", label=label))
 
     method = str(webhook.get("method") or "POST").upper()
     if method not in WEBHOOK_METHODS:
-        errors.append("Webhook 请求方法无效")
+        errors.append(i18n.t("settings.err_webhook_method"))
     content_type = str(webhook.get("content_type") or "application/json")
     if content_type not in WEBHOOK_CONTENT_TYPES:
-        errors.append("Webhook Content-Type 无效")
+        errors.append(i18n.t("settings.err_webhook_content_type"))
     priority = str(ntfy.get("priority") or "3")
     if priority not in ("1", "2", "3", "4", "5"):
-        errors.append("NTFY 优先级必须为 1-5")
+        errors.append(i18n.t("settings.err_ntfy_priority"))
     return errors
 
 
@@ -379,7 +391,7 @@ def save_settings(data: Dict[str, Any]) -> tuple[bool, str, int]:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             doc = ry.load(f)
         if not doc:
-            return False, "配置文件为空", 0
+            return False, i18n.t("settings.err_empty_config"), 0
 
         proxy_refs = 0
         if "proxy" in data:
@@ -432,10 +444,10 @@ def save_settings(data: Dict[str, Any]) -> tuple[bool, str, int]:
 
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             ry.dump(doc, f)
-        return True, "设置已保存", proxy_refs
+        return True, i18n.t("settings.saved"), proxy_refs
     except Exception as e:
         log_error(f"保存设置失败: {e}")
-        return False, f"保存失败: {str(e)}", 0
+        return False, i18n.t("settings.err_save", message=str(e)), 0
 
 
 def validate_cron_expression(expr: str) -> Dict[str, Any]:
@@ -449,17 +461,17 @@ def validate_cron_expression(expr: str) -> Dict[str, Any]:
 
         expr = (expr or "").strip()
         if not expr:
-            return {"valid": False, "error": "Cron 表达式不能为空"}
+            return {"valid": False, "error": i18n.t("cron.err_empty")}
 
         parts = expr.split()
         if len(parts) != 5:
             return {
                 "valid": False,
-                "error": f"Cron 表达式必须为 5 段（分 时 日 月 周），当前 {len(parts)} 段",
+                "error": i18n.t("cron.err_segments", n=len(parts)),
             }
 
         if not croniter.is_valid(expr):
-            return {"valid": False, "error": "Cron 表达式语法无效"}
+            return {"valid": False, "error": i18n.t("cron.err_invalid")}
 
         itr = croniter(expr, datetime.now())
         next_time = itr.get_next(datetime)
@@ -469,7 +481,7 @@ def validate_cron_expression(expr: str) -> Dict[str, Any]:
             "description": parse_cron(expr),
         }
     except Exception as e:
-        return {"valid": False, "error": f"验证失败: {str(e)}"}
+        return {"valid": False, "error": i18n.t("cron.err_failed", message=str(e))}
 
 
 def script_path_exists(script_path: str) -> bool:
@@ -592,7 +604,7 @@ def update_task_config(
             doc = ry.load(f)
 
         if not doc or "tasks" not in doc:
-            return False, "配置文件无效或无 tasks 段"
+            return False, i18n.t("tasks.edit_no_tasks")
 
         # 定位目标任务
         target_task = None
@@ -603,19 +615,19 @@ def update_task_config(
                 break
 
         if target_task is None:
-            return False, f"未找到任务: {original_name}"
+            return False, i18n.t("tasks.server_not_found", name=original_name)
 
         # 名称唯一性校验（若重命名）
         new_name = (updates.get("name") or "").strip()
         if not new_name:
-            return False, "任务名称不能为空"
+            return False, i18n.t("tasks.err_name_required")
         if new_name.lower() != original_name.lower():
             for task in doc["tasks"]:
                 if task is target_task:
                     continue
                 n = task.get("name", "")
                 if isinstance(n, str) and n.lower() == new_name.lower():
-                    return False, f"任务名称已存在: {new_name}"
+                    return False, i18n.t("tasks.edit_name_exists", name=new_name)
 
         # 更新标量字段
         target_task["name"] = new_name
@@ -662,10 +674,10 @@ def update_task_config(
             ry.dump(doc, f)
 
         # log_success(f"[WebUI] 任务 {new_name} 配置已更新")
-        return True, f"任务 {new_name} 配置已更新"
+        return True, i18n.t("tasks.edit_updated", name=new_name)
     except Exception as e:
         log_error(f"更新任务配置失败: {e}")
-        return False, f"更新失败: {str(e)}"
+        return False, i18n.t("tasks.edit_failed", message=str(e))
 
 
 def perform_reload() -> tuple[bool, str]:
@@ -686,18 +698,18 @@ def perform_reload() -> tuple[bool, str]:
                 cwd=str(PROJECT_ROOT),
             )
             if result.returncode != 0:
-                return False, f"生成环境变量失败: {result.stderr}"
+                return False, i18n.t("reload_env_failed", message=result.stderr)
 
         # Windows 环境跳过 crontab 相关操作（cron 是 Linux-only）
         if os.name == "nt":
             log_success("[WebUI] 配置重载完成（Windows 环境跳过 crontab 更新）")
-            return True, "配置重载完成（Windows 环境跳过 crontab 更新）"
+            return True, i18n.t("reload_done_windows")
 
         # 2. 重新生成 crontab 文件
         cron_file = "/tmp/crontab"
         make_cron_path = PROJECT_ROOT / "make_cron.py"
         if not make_cron_path.exists():
-            return False, "未找到 make_cron.py"
+            return False, i18n.t("reload_no_make_cron")
 
         with open(cron_file, "w", encoding="utf-8") as f:
             f.write("# 自动生成的crontab - 由 WebUI 重载\n")
@@ -717,7 +729,7 @@ def perform_reload() -> tuple[bool, str]:
             cwd=str(PROJECT_ROOT),
         )
         if result.returncode != 0:
-            return False, f"生成 crontab 失败: {result.stderr}"
+            return False, i18n.t("reload_cron_failed", message=result.stderr)
 
         # 3. 加载新的 crontab
         result = subprocess.run(
@@ -726,13 +738,13 @@ def perform_reload() -> tuple[bool, str]:
             text=True,
         )
         if result.returncode != 0:
-            return False, f"加载 crontab 失败: {result.stderr}"
+            return False, i18n.t("reload_load_failed", message=result.stderr)
 
         log_success("[WebUI] 配置重载完成")
-        return True, "配置重载完成，cron 调度已更新"
+        return True, i18n.t("reload_done")
     except Exception as e:
         log_error(f"重载配置失败: {e}")
-        return False, f"重载失败: {str(e)}"
+        return False, i18n.t("reload_failed", message=str(e))
 
 
 def get_container_status() -> Dict[str, Any]:
@@ -777,50 +789,105 @@ def get_container_status() -> Dict[str, Any]:
             encoding="utf-8",
         )
         if result2.returncode == 0 and "lite-cron" in result2.stdout:
-            return {"running": False, "exists": True, "message": "容器已停止"}
+            return {
+                "running": False,
+                "exists": True,
+                "message": i18n.t("container.stopped"),
+            }
 
-        return {"running": False, "exists": False, "message": "容器不存在"}
+        return {
+            "running": False,
+            "exists": False,
+            "message": i18n.t("container.missing"),
+        }
     except Exception as e:
-        return {"running": False, "error": str(e), "message": "无法获取状态"}
+        return {
+            "running": False,
+            "error": str(e),
+            "message": i18n.t("container.unknown"),
+        }
+
+
+def _cron_weekday_name(weekday: str) -> Optional[str]:
+    """取星期名；不在 0-7 内（如 1-5）时返回 None，与旧实现的跳过行为一致。"""
+    key = f"cron.day_{weekday}"
+    name = i18n.t(key)
+    return None if name == key else name
 
 
 def parse_cron(cron_expr: str) -> str:
-    """解析 cron 表达式为人类可读格式"""
-    parts = cron_expr.split()
+    """解析 cron 表达式为人类可读格式（跟随当前界面语言）"""
+    parts = (cron_expr or "").split()
     if len(parts) != 5:
         return cron_expr
 
     minute, hour, day, month, weekday = parts
+    if i18n.current_language() == i18n.LANG_EN:
+        return _describe_cron_en(minute, hour, weekday, cron_expr)
+    return _describe_cron_zh(minute, hour, weekday, cron_expr)
+
+
+def _describe_cron_zh(minute: str, hour: str, weekday: str, cron_expr: str) -> str:
+    """中文描述：措辞与改造前逐字一致（如「0分 2时」「每30分钟」）。"""
     desc = []
 
     if minute == "*":
-        desc.append("每分钟")
+        desc.append(i18n.t("cron.desc_every_minute"))
+        repeat_minute = True
     elif minute.startswith("*/"):
-        desc.append(f"每{minute[2:]}分钟")
+        desc.append(i18n.t("cron.desc_every_n_minutes", n=minute[2:]))
+        repeat_minute = True
     else:
-        desc.append(f"{minute}分")
+        desc.append(i18n.t("cron.desc_at_minute", n=minute))
+        repeat_minute = False
 
     if hour == "*":
-        if "每" in desc[0]:
-            desc.append("每小时")
+        if repeat_minute:
+            desc.append(i18n.t("cron.desc_every_hour"))
     elif hour.startswith("*/"):
-        desc.append(f"每{hour[2:]}小时")
+        desc.append(i18n.t("cron.desc_every_n_hours", n=hour[2:]))
     else:
-        desc.append(f"{hour}时")
+        desc.append(i18n.t("cron.desc_at_hour", n=hour))
 
     if weekday != "*":
-        weekdays = {
-            "0": "周日",
-            "1": "周一",
-            "2": "周二",
-            "3": "周三",
-            "4": "周四",
-            "5": "周五",
-            "6": "周六",
-            "7": "周日",
-        }
-        if weekday in weekdays:
-            desc.append(f"每{weekdays[weekday]}")
+        day_name = _cron_weekday_name(weekday)
+        if day_name:
+            desc.append(i18n.t("cron.desc_weekday", day=day_name))
+
+    return " ".join(desc) if len(desc) <= 3 else cron_expr
+
+
+def _describe_cron_en(minute: str, hour: str, weekday: str, cron_expr: str) -> str:
+    """英文描述：分钟内与小时均为数字时合并成钟点（如「at 02:00」）。"""
+    desc = []
+
+    if minute == "*" and hour == "*":
+        desc.append(i18n.t("cron.desc_every_minute"))
+    elif minute.isdigit() and hour.isdigit():
+        desc.append(
+            i18n.t("cron.desc_at_time", time=f"{int(hour):02d}:{int(minute):02d}")
+        )
+    else:
+        if minute == "*":
+            desc.append(i18n.t("cron.desc_every_minute"))
+        elif minute.startswith("*/"):
+            desc.append(i18n.t("cron.desc_every_n_minutes", n=minute[2:]))
+        else:
+            desc.append(i18n.t("cron.desc_at_minute", n=minute))
+
+        if hour == "*":
+            # 「every N minutes」已隐含每小时，只有定点分钟才补上 every hour
+            if minute.isdigit():
+                desc.append(i18n.t("cron.desc_every_hour"))
+        elif hour.startswith("*/"):
+            desc.append(i18n.t("cron.desc_every_n_hours", n=hour[2:]))
+        else:
+            desc.append(i18n.t("cron.desc_at_hour", n=hour))
+
+    if weekday != "*":
+        day_name = _cron_weekday_name(weekday)
+        if day_name:
+            desc.append(i18n.t("cron.desc_weekday", day=day_name))
 
     return " ".join(desc) if len(desc) <= 3 else cron_expr
 
@@ -873,7 +940,10 @@ def require_auth():
             return None
     # 未通过：API 返回 401，页面跳转登录
     if path.startswith("/api/"):
-        return jsonify({"error": "unauthorized", "message": "鉴权失败，请登录"}), 401
+        return (
+            jsonify({"error": "unauthorized", "message": i18n.t("auth.required")}),
+            401,
+        )
     return redirect("/login")
 
 
@@ -892,8 +962,8 @@ def login():
             log_info("[WebUI] 用户登录成功")
             return redirect("/")
         log_warning("[WebUI] 登录失败：令牌无效")
-        return render_template("login.html", error="令牌无效，请重试"), 401
-    return render_template("login.html", error=None)
+        return render_template("login.html", error_key="auth.invalid_token"), 401
+    return render_template("login.html", error_key=None)
 
 
 @app.route("/logout", methods=["POST"])
@@ -927,12 +997,28 @@ def api_settings():
             return jsonify({"success": True, "settings": get_settings()})
         except Exception as e:
             log_error(f"读取设置失败: {e}")
-            return jsonify({"success": False, "message": f"读取设置失败: {str(e)}"}), 500
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": i18n.t("settings.err_read", message=str(e)),
+                    }
+                ),
+                500,
+            )
 
     data = request.get_json(silent=True) or {}
     errors = validate_settings_payload(data)
     if errors:
-        return jsonify({"success": False, "message": "；".join(errors)}), 400
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": i18n.t("common.error_sep").join(errors),
+                }
+            ),
+            400,
+        )
 
     ok, message, proxy_refs = save_settings(data)
     if not ok:
@@ -1055,7 +1141,10 @@ def api_run_task(task_name: str):
     def generate():
         log_info(f"[WebUI] 开始执行任务: {task_name}")
         yield json.dumps(
-            {"status": "started", "message": f"开始执行任务: {task_name}"},
+            {
+                "status": "started",
+                "message": i18n.t("tasks.run_started", name=task_name),
+            },
             ensure_ascii=False,
         ) + "\n"
 
@@ -1064,7 +1153,8 @@ def api_run_task(task_name: str):
             if not config or "tasks" not in config:
                 log_error(f"[WebUI] 执行任务 {task_name} 失败: 配置未找到")
                 yield json.dumps(
-                    {"status": "error", "message": "配置未找到"}, ensure_ascii=False
+                    {"status": "error", "message": i18n.t("tasks.run_no_config")},
+                    ensure_ascii=False,
                 ) + "\n"
                 return
 
@@ -1077,7 +1167,10 @@ def api_run_task(task_name: str):
             if not task:
                 log_error(f"[WebUI] 执行任务 {task_name} 失败: 任务未找到")
                 yield json.dumps(
-                    {"status": "error", "message": f"未找到任务: {task_name}"},
+                    {
+                        "status": "error",
+                        "message": i18n.t("tasks.server_not_found", name=task_name),
+                    },
                     ensure_ascii=False,
                 ) + "\n"
                 return
@@ -1085,7 +1178,8 @@ def api_run_task(task_name: str):
             if not task.get("enabled", True):
                 log_warning(f"[WebUI] 执行任务 {task_name} 失败: 任务已禁用")
                 yield json.dumps(
-                    {"status": "error", "message": "任务已禁用"}, ensure_ascii=False
+                    {"status": "error", "message": i18n.t("tasks.run_disabled")},
+                    ensure_ascii=False,
                 ) + "\n"
                 return
 
@@ -1093,7 +1187,8 @@ def api_run_task(task_name: str):
             if not script_path:
                 log_error(f"[WebUI] 执行任务 {task_name} 失败: 任务未配置脚本")
                 yield json.dumps(
-                    {"status": "error", "message": "任务未配置脚本"}, ensure_ascii=False
+                    {"status": "error", "message": i18n.t("tasks.run_no_script")},
+                    ensure_ascii=False,
                 ) + "\n"
                 return
 
@@ -1103,7 +1198,12 @@ def api_run_task(task_name: str):
             if not full_script_path.exists():
                 log_error(f"[WebUI] 执行任务 {task_name} 失败: 脚本文件不存在 {script_path}")
                 yield json.dumps(
-                    {"status": "error", "message": f"脚本文件不存在: {script_path}"},
+                    {
+                        "status": "error",
+                        "message": i18n.t(
+                            "tasks.run_missing_script", path=script_path
+                        ),
+                    },
                     ensure_ascii=False,
                 ) + "\n"
                 return
@@ -1127,21 +1227,26 @@ def api_run_task(task_name: str):
                 cmd = [sys.executable, str(full_script_path)]
 
             yield json.dumps(
-                {"status": "running", "output": f"执行命令: {' '.join(cmd)}"},
+                {
+                    "status": "running",
+                    "output": i18n.t("tasks.run_command", command=" ".join(cmd)),
+                },
                 ensure_ascii=False,
             ) + "\n"
 
-            # Windows 本地环境默认使用 GBK，容器内使用 UTF-8
-            stdout_encoding = "utf-8"
-            if os.name == "nt":
-                stdout_encoding = locale.getencoding() or "gbk"
+            # 父子进程统一按 UTF-8 交换输出。
+            # 不能沿用 Windows 的 locale 编码（GBK）：子进程 sys.stdout 变成 GBK 后，
+            # 任何带 emoji 的日志行都会抛 UnicodeEncodeError，直接把任务打死
+            # （NodeSeek 的 🚀、FnClub 的 ✅ 就是这种情况）。PYTHONIOENCODING
+            # 让子进程也写 UTF-8，这里按 UTF-8 解码，中文与 emoji 都能完整还原。
+            task_env["PYTHONIOENCODING"] = "utf-8"
 
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                encoding=stdout_encoding,
+                encoding="utf-8",
                 errors="replace",
                 cwd=str(PROJECT_ROOT),
                 env=task_env,
@@ -1168,10 +1273,8 @@ def api_run_task(task_name: str):
                     "status": "completed",
                     "success": success,
                     "returncode": process.returncode,
-                    "message": (
-                        "✅ 任务执行成功，日志已记录到 /app/logs/"
-                        if success
-                        else "❌ 任务执行失败，日志已记录到 /app/logs/"
+                    "message": i18n.t(
+                        "tasks.run_done" if success else "tasks.run_done_failed"
                     ),
                 },
                 ensure_ascii=False,
@@ -1180,11 +1283,17 @@ def api_run_task(task_name: str):
         except Exception as e:
             log_error(f"[WebUI] 执行任务 {task_name} 出错: {str(e)}")
             yield json.dumps(
-                {"status": "error", "success": False, "message": f"执行出错: {str(e)}"},
+                {
+                    "status": "error",
+                    "success": False,
+                    "message": i18n.t("tasks.run_error", message=str(e)),
+                },
                 ensure_ascii=False,
             ) + "\n"
 
-    return Response(generate(), mimetype="application/x-ndjson")
+    # stream_with_context：生成器在视图返回之后才被消费，需显式保留请求上下文，
+    # 否则内部 i18n.t() 取不到 g.lang，终端系统行会退回中文
+    return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
 
 
 @app.route("/api/tasks/<task_name>/toggle", methods=["POST"])
@@ -1196,13 +1305,17 @@ def api_toggle_task(task_name: str):
     """
     new_status = toggle_task_enabled(task_name)
     if new_status is None:
-        return jsonify({"success": False, "message": "任务未找到或保存失败"})
+        return jsonify(
+            {"success": False, "message": i18n.t("tasks.server_not_found_save")}
+        )
 
     return jsonify(
         {
             "success": True,
             "enabled": new_status,
-            "message": f"任务已{'启用' if new_status else '禁用'}",
+            "message": i18n.t(
+                "tasks.toggle_enabled" if new_status else "tasks.toggle_disabled"
+            ),
         }
     )
 
@@ -1226,7 +1339,7 @@ def set_all_tasks_enabled(enabled: bool) -> tuple[bool, int, str]:
             doc = ry.load(f)
 
         if not doc or "tasks" not in doc:
-            return False, 0, "配置未找到或无 tasks 段"
+            return False, 0, i18n.t("tasks.batch_no_config")
 
         count = 0
         for task in doc["tasks"]:
@@ -1240,10 +1353,14 @@ def set_all_tasks_enabled(enabled: bool) -> tuple[bool, int, str]:
 
         action = "启用" if enabled else "禁用"
         log_success(f"[WebUI] 批量操作：已{action} {count} 个任务")
-        return True, count, f"已{action} {count} 个任务"
+        return (
+            True,
+            count,
+            i18n.t("tasks.batch_enabled" if enabled else "tasks.batch_disabled", n=count),
+        )
     except Exception as e:
         log_error(f"批量{enabled and '启用' or '禁用'}任务失败: {e}")
-        return False, 0, f"操作失败: {str(e)}"
+        return False, 0, i18n.t("tasks.batch_failed", message=str(e))
 
 
 @app.route("/api/tasks/batch/toggle", methods=["POST"])
@@ -1292,7 +1409,7 @@ def api_log_content(filename: str):
     try:
         log_file.resolve().relative_to(LOGS_DIR.resolve())
     except ValueError:
-        return jsonify({"error": "非法路径"}), 403
+        return jsonify({"error": i18n.t("logs.err_invalid_path")}), 403
 
     if not log_file.exists():
         return jsonify({"content": "", "lines": 0})
@@ -1313,7 +1430,10 @@ def api_log_content(filename: str):
 
         return jsonify({"content": content, "lines": len(lines), "filename": filename})
     except Exception as e:
-        return jsonify({"error": f"读取日志失败: {str(e)}"}), 500
+        return (
+            jsonify({"error": i18n.t("logs.err_read", message=str(e))}),
+            500,
+        )
 
 
 @app.route("/api/reload", methods=["POST"])
@@ -1330,7 +1450,15 @@ def api_task_detail(task_name: str):
     """获取任务详情（包含 env 和别名信息），用于编辑表单初始化"""
     detail = get_task_detail(task_name)
     if detail is None:
-        return jsonify({"success": False, "message": f"未找到任务: {task_name}"}), 404
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": i18n.t("tasks.server_not_found", name=task_name),
+                }
+            ),
+            404,
+        )
     return jsonify({"success": True, "task": detail})
 
 
@@ -1349,9 +1477,16 @@ def api_validate_script():
     data = request.get_json(silent=True) or {}
     script = (data.get("script") or "").strip()
     if not script:
-        return jsonify({"valid": False, "error": "脚本路径不能为空"})
+        return jsonify({"valid": False, "error": i18n.t("tasks.validate_empty_script")})
     exists = script_path_exists(script)
-    return jsonify({"valid": exists, "error": "" if exists else f"脚本文件不存在: {script}"})
+    return jsonify(
+        {
+            "valid": exists,
+            "error": ""
+            if exists
+            else i18n.t("tasks.validate_missing_script", path=script),
+        }
+    )
 
 
 @app.route("/api/tasks/<task_name>/edit", methods=["POST"])
@@ -1372,20 +1507,25 @@ def api_edit_task(task_name: str):
     # 1. 非空校验
     errors = []
     if not name:
-        errors.append("任务名称不能为空")
+        errors.append(i18n.t("tasks.err_name_required"))
     if not schedule:
-        errors.append("调度规则不能为空")
+        errors.append(i18n.t("tasks.err_schedule_required"))
     if not script:
-        errors.append("脚本路径不能为空")
+        errors.append(i18n.t("tasks.err_script_required"))
 
     # 2. Cron 格式校验
     cron_result = validate_cron_expression(schedule) if schedule else None
     if cron_result and not cron_result.get("valid"):
-        errors.append(f"调度规则: {cron_result.get('error', '无效')}")
+        errors.append(
+            i18n.t(
+                "tasks.err_schedule_prefix",
+                error=cron_result.get("error", i18n.t("cron.err_invalid")),
+            )
+        )
 
     # 3. 脚本路径存在性校验
     if script and not script_path_exists(script):
-        errors.append(f"脚本文件不存在: {script}")
+        errors.append(i18n.t("tasks.validate_missing_script", path=script))
 
     # 4. env 键名规范校验（仅校验非别名的键：键名不能为空、不能重复）
     seen_keys = set()
@@ -1394,11 +1534,19 @@ def api_edit_task(task_name: str):
         if not key:
             continue
         if key in seen_keys:
-            errors.append(f"环境变量键名重复: {key}")
+            errors.append(i18n.t("tasks.err_dup_env", key=key))
         seen_keys.add(key)
 
     if errors:
-        return jsonify({"success": False, "message": "；".join(errors)}), 400
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": i18n.t("common.error_sep").join(errors),
+                }
+            ),
+            400,
+        )
 
     # 5. 更新 config.yml（保留锚点/注释）
     updates = {
@@ -1480,13 +1628,21 @@ def api_clean():
         return jsonify(
             {
                 "success": True,
-                "message": f"✅ 已清理 {cleaned_count} 个超过7天的日志文件",
+                "message": i18n.t("logs.cleaned_server", n=cleaned_count),
                 "cleaned": cleaned_count,
             }
         )
     except Exception as e:
         log_error(f"[WebUI] 清理日志失败: {str(e)}")
-        return jsonify({"success": False, "message": f"清理失败: {str(e)}"}), 500
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": i18n.t("logs.clean_failed_server", message=str(e)),
+                }
+            ),
+            500,
+        )
 
 
 if __name__ == "__main__":
