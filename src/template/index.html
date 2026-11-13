@@ -19,7 +19,7 @@
             }
         } catch (e) {}
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='21') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='23') }}">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
@@ -124,7 +124,10 @@
         </main>
 
         <footer class="footer">
-            <p>LiteCron WebUI · <a href="https://github.com/pdone/lite-cron" target="_blank" rel="noopener noreferrer">{{ _('footer.home') }}</a></p>
+            <p class="footer-line">
+                <span class="footer-item">LiteCron WebUI</span>
+                <span class="footer-item"><a href="https://github.com/pdone/lite-cron" target="_blank" rel="noopener noreferrer">{{ _('footer.github') }}</a></span>
+            </p>
         </footer>
     </div>
 

@@ -28,7 +28,7 @@ MESSAGES = {
     "header.settings": "Settings",
     "header.logout": "Sign out",
     "header.logout_title": "Sign out",
-    "footer.home": "Project Home",
+    "footer.github": "GitHub",
 
     # ==================== Task list ====================
     "tasks.title": "Scheduled Tasks",

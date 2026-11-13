@@ -30,7 +30,7 @@ MESSAGES = {
     "header.settings": "设置",
     "header.logout": "退出",
     "header.logout_title": "退出登录",
-    "footer.home": "项目主页",
+    "footer.github": "GitHub",
 
     # ==================== 任务列表 ====================
     "tasks.title": "定时任务",

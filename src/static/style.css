@@ -1193,6 +1193,20 @@ body::before {
     font-size: 0.8125rem;
 }
 
+.footer-line {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    row-gap: 4px;
+}
+
+/* 分隔符由伪元素产生：不进入读屏播报，模板也不必维护「除首项外每项带前缀」的对称性 */
+.footer-item + .footer-item::before {
+    content: '·';
+    margin: 0 0.6em;
+}
+
 .footer a {
     color: var(--text-muted);
     text-decoration: none;
