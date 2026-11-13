@@ -2,17 +2,9 @@
    LiteCron Web UI - Modern Theme
    ============================================ */
 
-/* 渐变的色标需要单独注册成可插值颜色。
-   background-image 不可插值，渐变只能用「内部颜色逐帧变化」的方式过渡，
-   否则渐变区域（页头、模态头/脚、渐变按钮）会在切换瞬间跳色，
-   看起来就是「标题栏先变、内容区后变」。 */
-@property --grad-primary-1 { syntax: '<color>'; inherits: true; initial-value: #6366f1; }
-@property --grad-primary-2 { syntax: '<color>'; inherits: true; initial-value: #8b5cf6; }
-@property --grad-primary-3 { syntax: '<color>'; inherits: true; initial-value: #ec4899; }
-
 /* 深色配色（默认）。主题由 <html data-theme="light|dark|system"> 控制，
    system 分支交给 prefers-color-scheme，详见下方浅色配色块。
-   主题切换的过渡见文件下方的 .theme-switching 规则。 */
+   主题切换的过渡见文件下方的 ::view-transition-* 规则。 */
 :root {
     color-scheme: dark;
     --icon-stroke-width: 1.5;
@@ -110,47 +102,61 @@
     --spacing-2xl: 48px;
 }
 
-/* 主题切换过渡。
-   做法：切换瞬间由 JS 给 <html> 挂 .theme-switching，把配色 token 一次性换成新值，
-   再让「所有元素」在同一时序上过渡自己的颜色属性。这样各控件的起止时刻与缓动完全一致。
-   不能改成在 :root 上过渡普通配色 token：那样每个元素自身的 transition（如
-   .data-table tbody tr 的 transition: all 120ms）会逐帧被重新触发，反而落后于他人，
-   而阴影等非颜色 token 又会瞬间跳变，出现「有的先变有的后变」。
-   这里用 !important 覆盖窗口期内元素自带的 transition，保证统一时序；
-   窗口期 240ms 过渡 + 160ms 余量，期间的 hover 反馈被临时接管，肉眼无感。
-   （窗口不能短于过渡：提前摘类会让在途过渡被取消、直接跳到终值。）
-   无 JS 时不做过渡，直接跳到目标配色（功能不受影响）。 */
+/* 主题切换过渡：整页淡化。
+   JS 用 document.startViewTransition() 包裹 data-theme 的写入，浏览器在前后各取一张
+   视口快照，过渡期间只是两张静态位图在合成器上混合。逐帧的样式重算、全页重绘，
+   以及遮罩 backdrop-filter 的重算全部消失——这正是之前掉帧的三个来源。
+   旧做法（给 html 与所有元素挂 !important 的颜色 transition）已经删除：
+   它每帧都要重算全树样式并重绘全页，切换入口又在带模糊遮罩的设置弹窗内，
+   每帧还要额外重算一次全屏 blur(8px)。
 
-/* 渐变色标只在 <html> 上过渡：后代通过继承拿到逐帧变化的值即可。
-   绝不能把它们写进下面那条 `*` 规则——那会让每个元素各自再跑一遍这些自定义属性的过渡
-   （实测 3915 个元素 × 7 个色标 ≈ 2.7 万条多余过渡），渐变重绘被拖垮，
-   表现为标题栏先僵住、随后跳一大格，与内容区完全脱节。 */
-html.theme-switching {
-    transition-property: background-color, border-color, color, box-shadow,
-        fill, stroke, outline-color, text-decoration-color,
-        --grad-primary-1, --grad-primary-2, --grad-primary-3 !important;
-    transition-duration: 240ms !important;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
-    transition-delay: 0s !important;
+   不要给任何元素声明具名的 view transition 名称：多一个具名 group 就会被单独抠出来
+   动画，整页一致性被破坏，还会多出一次快照开销。根元素默认名 root 已经够用。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 240ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    mix-blend-mode: normal;
 }
 
-html.theme-switching *,
-html.theme-switching *::before,
-html.theme-switching *::after {
-    transition-property: background-color, border-color, color, box-shadow,
-        fill, stroke, outline-color, text-decoration-color !important;
-    transition-duration: 240ms !important;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
-    transition-delay: 0s !important;
+/* 旧图保持不透明垫底，只让上层新图淡入。
+   若让两张图同时一进一出，中段合成 alpha 只有约 0.75，页面会先「透底」再回来，
+   表现为一次发白/发灰的闪。 */
+::view-transition-old(root) {
+    animation: none;
+    opacity: 1;
 }
 
-/* 尊重系统的「减少动态效果」设置 */
+::view-transition-new(root) {
+    animation-name: vt-theme-fade-in;
+}
+
+@keyframes vt-theme-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* 快照窗口期：由 JS 在改 data-theme 之前挂上，淡化结束（或被跳过）后摘掉。
+   窗口内禁掉元素自带的 transition，让「新快照」必然拍到终值。
+   否则新快照会把过渡中途的颜色固化进去：带 transition: all 的卡片、按钮、
+   弹窗底色会在淡化期间明显落后于没有 transition 的区域（CDP 帧级实测落后 60~90ms），
+   看起来就是「有的组件先变、有的后变」。
+   代价是这 240ms 内的 hover 反馈被接管；摘掉后不会触发新的过渡，因为值已是终值。
+   注意这只是窗口期的一条规则，不是逐帧过渡：开销是一次样式重算，与掉帧无关。 */
+html.theme-snapshotting,
+html.theme-snapshotting *,
+html.theme-snapshotting *::before,
+html.theme-snapshotting *::after {
+    transition: none !important;
+}
+
+/* 尊重系统的「减少动态效果」设置。
+   JS 侧已在 canCrossfadeTheme() 里跳过快照，这里兜住「页面加载后才改系统设置」
+   与 JS 判断失效的情况。 */
 @media (prefers-reduced-motion: reduce) {
-    html.theme-switching,
-    html.theme-switching *,
-    html.theme-switching *::before,
-    html.theme-switching *::after {
-        transition-duration: 1ms !important;
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation: none;
     }
 }
 

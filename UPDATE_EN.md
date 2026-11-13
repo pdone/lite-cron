@@ -4,6 +4,16 @@
 
 This file covers releases from `v1.6.0` onward; for earlier changes, refer to the git history and GitHub Releases.
 
+## v1.7.1
+
+### Changed
+
+- Theme switching now cross-fades the whole page: old and new colors blend at the same progress, so no area changes before another
+
+### Fixed
+
+- Fixed frame drops when switching themes: the transition no longer recalculates styles or repaints the whole page per frame, and no longer recomputes the modal backdrop blur
+
 ## v1.7.0
 
 ### Added

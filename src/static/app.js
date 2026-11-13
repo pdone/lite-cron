@@ -188,11 +188,6 @@ function setHideDisabledTasks(hidden) {
 
 const THEME_STORAGE_KEY = 'litecron_theme';
 const THEME_MODES = ['light', 'system', 'dark'];
-const THEME_TRANSITION_MS = 240;
-// 窗口必须比过渡本身更长：过早摘掉类会让元素回落到自身的 transition，
-// 在途的颜色过渡被取消并直接跳到终值。首帧提交也可能推迟，故留足余量。
-const THEME_WINDOW_MS = THEME_TRANSITION_MS + 160;
-let themeSwitchTimer = null;
 
 function loadThemePreference() {
     try {
@@ -222,38 +217,70 @@ function syncThemeSegmented() {
     });
 }
 
-// 切换瞬间给 <html> 挂 .theme-switching：窗口期内所有元素按同一时长/缓动过渡颜色，
-// 各控件因此同步。只靠 CSS 过渡自定义属性做不到——元素自带的 transition
-// （如表格行的 transition: all 120ms）会被逐帧重启而落后，阴影等非颜色 token 又会瞬变。
-function markThemeSwitching() {
-    const root = document.documentElement;
-    root.classList.add('theme-switching');
-    if (themeSwitchTimer) clearTimeout(themeSwitchTimer);
-    themeSwitchTimer = setTimeout(() => {
-        root.classList.remove('theme-switching');
-        themeSwitchTimer = null;
-    }, THEME_WINDOW_MS);
-}
-
 // 「跟随系统」由 JS 解析成具体的 light/dark 再写入 data-theme。
-// 这样系统主题变化时能先挂过渡窗口再改属性，与手动切换走完全相同的路径、完全同步。
+// 这样系统主题变化时能先起淡化再改属性，与手动切换走完全相同的路径、完全同步。
 // CSS 里 @media (prefers-color-scheme: light) { :root[data-theme="system"] } 仍保留：
 // 首屏（脚本未执行前）与 JS 不可用时由它兜底。
 const THEME_DARK_QUERY = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+const THEME_REDUCED_MOTION = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 
 function resolveTheme(mode) {
     if (mode !== 'system') return mode;
     return THEME_DARK_QUERY && THEME_DARK_QUERY.matches ? 'dark' : 'light';
 }
 
+// 整页淡化靠同文档 View Transition 的两张快照完成：过渡期间页面只是两张静态位图
+// 在合成器上混合，逐帧的样式重算、全页重绘与遮罩 backdrop-filter 重算全部归零。
+// 不支持该能力、或用户要求减少动态效果时直接切色，不退化成逐元素动画。
+function canCrossfadeTheme() {
+    return typeof document.startViewTransition === 'function'
+        && !(THEME_REDUCED_MOTION && THEME_REDUCED_MOTION.matches);
+}
+
+// 快照窗口期（配合 style.css 的 html.theme-snapshotting）。
+// 元素自带的 transition 会让「新快照」拍到的是过渡中途的旧色，于是带 transition 的
+// 卡片、按钮、弹窗底色在淡化期间明显落后于没有 transition 的区域（实测落后 60~90ms）。
+// 窗口期内统一禁掉 transition，新快照必然取到终值。
+const THEME_SNAPSHOT_CLASS = 'theme-snapshotting';
+
 let appliedTheme = null;  // 上一次实际生效的 light/dark
 
 function writeTheme(concrete) {
+    // 解析成具体主题后没变（如浅色 -> 跟随系统且系统也是浅色）：不做无谓淡化
+    if (appliedTheme === concrete) return;
+
     const root = document.documentElement;
-    // 先挂过渡窗口再改属性，保证同一帧内样式重算时过渡已生效
-    if (appliedTheme && appliedTheme !== concrete) markThemeSwitching();
-    appliedTheme = concrete;
-    root.dataset.theme = concrete;
+    const commit = () => {
+        appliedTheme = concrete;
+        root.dataset.theme = concrete;
+    };
+
+    // 首屏第一次应用必须同步直写：此刻 data-theme 已由 <head> 内联脚本给到首帧终值，
+    // 走淡化会变成「从另一配色淡入」，违反「首次载入不播放过渡」
+    if (appliedTheme === null || !canCrossfadeTheme()) {
+        commit();
+        return;
+    }
+
+    // 必须在改 data-theme 之前挂上，才能让这次样式重算在无 transition 的前提下完成
+    const endSnapshotWindow = () => root.classList.remove(THEME_SNAPSHOT_CLASS);
+    root.classList.add(THEME_SNAPSHOT_CLASS);
+
+    let transition = null;
+    try {
+        transition = document.startViewTransition(commit);
+    } catch (e) {
+        endSnapshotWindow();
+        commit();
+        return;
+    }
+    // finished 在过渡被跳过时以 AbortError 拒绝，两个分支都要摘掉窗口期 class。
+    // 此时元素值已是终值，摘掉 class 不会重新触发任何过渡。
+    if (transition && transition.finished) {
+        transition.finished.then(endSnapshotWindow, endSnapshotWindow);
+    } else {
+        setTimeout(endSnapshotWindow, 400);
+    }
 }
 
 function applyTheme(mode, persist) {
