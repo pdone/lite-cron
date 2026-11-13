@@ -337,11 +337,15 @@ python manage.py restart       # No rebuild needed - config is volume-mounted
 - `src/static/style.css` 顶部有三块 token：`:root`（深色默认）、`:root[data-theme="light"]`（显式浅色）、`@media (prefers-color-scheme: light) { :root[data-theme="system"] }`（跟随系统）。
   - 两个浅色块内容必须**逐行一致**，改一处必须同步另一处。
   - 各块声明 `color-scheme`，让滚动条与原生控件跟随主题。
-- 主题切换的过渡由「过渡窗口」实现：JS 在切换瞬间给 `<html>` 挂 `.theme-switching`，窗口期（240ms 过渡 + 160ms 余量）内用 `!important` 把所有元素的颜色类过渡统一成 240ms。**不要改回**在 `:root` 上过渡自定义属性——元素自带的 `transition` 会被逐帧重启而落后，阴影又会瞬变，导致控件「有的先变有的后变」。窗口也不能短于过渡，否则在途过渡会被取消并跳到终值。
+- 主题切换的过渡是**整页淡化**：`writeTheme()`（`app.js`）用 `document.startViewTransition()` 包裹 `data-theme` 的写入，浏览器在改色前后各取一张视口快照，240ms 内只是两张静态位图在合成器上混合，因此不掉帧。CSS 侧只有 `::view-transition-old/new(root)` 与 `@keyframes vt-theme-fade-in`（`style.css` 顶部），旧图保持不透明垫底、只让新图淡入，避免中段透明度凹陷发白。
+  - **不要给任何元素声明具名的 `view-transition-name`**：多一个具名 group 就会被单独抠出来动画，整页一致性被破坏，还会多一次快照开销。
+  - **快照窗口期的 `theme-snapshotting` 不能省**：JS 在写 `data-theme` 之前给 `<html>` 挂该类，窗口内所有元素的 `transition` 被置为 `none !important`。否则新快照会把「过渡中途」的旧色固化进去，带 `transition: all` 的卡片、按钮、弹窗底色会比其它区域晚 60~90ms 变完（实测）。摘除走 `transition.finished.then(done, done)`——过渡被跳过时 `finished` 以 `AbortError` 拒绝，只写 `then` 会让 class 永久残留。
+  - `prefers-reduced-motion: reduce` 下 JS 不启动快照，CSS 另有 `animation: none` 兜底；不支持 View Transitions 的浏览器直接切色，**不做逐元素退化动画**。
+  - 旧实现（`html.theme-switching` 窗口 + 全元素 240ms 颜色过渡）已删除：它每帧重算全树样式、重绘整页，而切换入口又在带 `backdrop-filter` 的弹窗内，每帧还要重算一次全屏模糊，必然掉帧。**不要改回去。**
 - 「跟随系统」由 JS 解析后写具体 `data-theme="light|dark"`（`THEME_DARK_QUERY` + `writeTheme`），与手动切换共用同一条路径；CSS 的 `@media ... :root[data-theme="system"]` 只负责首屏与 JS 不可用时的兜底。
-- **页面表面不要用随主题变化的渐变**：`background-image` 的重绘跟不上动画帧，实测标题栏能落后内容区 200ms。表面用 `background-color` + 主题无关的 `--surface-sheen` / `--accent-sheen`；渐变 token 若确实要用（仅剩文字渐变），只能挂到 `html.theme-switching`，**不能写进 `*` 规则**，否则每个元素都会重复跑自定义属性过渡。
-- **边框同样不能随主题变色**：1px 边框的颜色变化会被推迟到过渡末尾才提交（实测弹窗描边比底色晚约 130ms）。`--border-color` / `--border-light` 固定为半透明中性色，靠叠在淡入的底色上自动跟随，不再在两个浅色块里重复定义。`--shadow-*` 仍有约 20ms 延迟，因大面积模糊不可见，未处理。
-- `prefers-color-scheme` 驱动的系统主题变化是瞬时切换（无动画），因为浏览器提交媒体查询变更早于 `matchMedia` 的 `change` 事件。
+- 「跟随系统」下**系统主题变化同样走整页淡化**：`matchMedia` 的 `change` 事件里由 JS 重新解析并调 `writeTheme()`。浏览器提交 `prefers-color-scheme` 变更早于 `change` 事件，所以不要指望 CSS 媒体查询自己完成这次过渡。
+- **页面表面仍用 `background-color` + 主题无关的 `--surface-sheen` / `--accent-sheen`**：这是逐帧过渡时代的妥协（`background-image` 重绘跟不上动画帧），换成淡化后已非必需，但改动会牵动配色外观，故保留不动；要恢复随主题变化的渐变需当作独立变更评估。渐变 token（`--grad-primary-*` 与 `--gradient-primary`）现在只服务渐变文字（`.logo h1 a`、`.stat-num` 等），**不再注册成 `@property`**，也没有任何地方需要它逐帧插值。
+- **`--border-color` / `--border-light` 固定为半透明中性色**，不随主题变色，靠叠在变色的底色上自动跟随；两个浅色块里不要再重复定义它们。同样是逐帧过渡时代的妥协（1px 边框曾被推迟到过渡末尾才提交），现保留不动。
 - 任务日志配色：JS 只写入色相 `--task-hue`（`app.js` 的 `taskHue()`），饱和度/明度/透明度由 `--task-*` token 按主题派生。
   - 新增着色点必须挂 `task-colored` class，否则 `var(--task-hue)` 取空会让整条声明失效回退成 `currentColor`。
   - 任务标签 `[TASK:...]` 靠自定义属性继承取色，不需要内联样式。
