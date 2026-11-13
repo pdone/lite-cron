@@ -2432,25 +2432,45 @@ code
     margin-left: auto;
 }
 
+/* 网格两行：字段名居左、控件居右且与标题同行，描述独占下方整行 */
 .setting-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "title control"
+        "desc desc";
     align-items: center;
-    justify-content: space-between;
-    gap: var(--spacing-lg);
-    flex-wrap: wrap;
+    column-gap: var(--spacing-md);
+    row-gap: 6px;
+}
+
+.setting-row + .setting-row {
+    margin-top: var(--spacing-md);
+}
+
+/* 兼容仍带 .setting-info 包裹的旧模板缓存：拍平后子项直接参与网格 */
+.setting-info {
+    display: contents;
 }
 
 .setting-title {
+    grid-area: title;
     font-size: 0.9375rem;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 6px;
 }
 
 .setting-desc {
+    grid-area: desc;
     font-size: 0.8125rem;
     color: var(--text-muted);
     line-height: 1.6;
+}
+
+.setting-row > .switch,
+.setting-row > .theme-segmented {
+    grid-area: control;
+    justify-self: end;
 }
 
 .settings-badge {
@@ -2654,8 +2674,17 @@ code
     }
 
     .setting-row {
-        flex-direction: column;
-        align-items: flex-start;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "title"
+            "control"
+            "desc";
+        justify-items: start;
+    }
+
+    .setting-row > .switch,
+    .setting-row > .theme-segmented {
+        justify-self: start;
     }
 
     .settings-footer {

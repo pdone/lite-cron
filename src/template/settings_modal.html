@@ -21,21 +21,16 @@
                     <i data-lucide="eye-off" class="inline-icon"></i> {{ _('settings.section.display') }}
                 </div>
                 <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">{{ _('settings.hide_disabled') }}</div>
-                        <div class="setting-desc">{{ _('settings.hide_disabled_desc') }}</div>
-                    </div>
+                    <div class="setting-title">{{ _('settings.hide_disabled') }}</div>
                     <label class="switch hide-disabled-switch" for="hide-disabled-tasks" title="{{ _('settings.hide_disabled_title') }}">
                         <input type="checkbox" id="hide-disabled-tasks" role="switch" />
                         <span class="switch-track"></span>
                         <span class="switch-label">{{ _('settings.hide_disabled_label') }}</span>
                     </label>
+                    <div class="setting-desc">{{ _('settings.hide_disabled_desc') }}</div>
                 </div>
                 <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">{{ _('settings.theme') }}</div>
-                        <div class="setting-desc">{{ _('settings.theme_desc') }}</div>
-                    </div>
+                    <div class="setting-title">{{ _('settings.theme') }}</div>
                     <div class="theme-segmented" id="theme-segmented" role="radiogroup" aria-label="{{ _('settings.theme_aria') }}">
                         <button type="button" class="theme-segment" data-theme-value="system" role="radio" aria-checked="false">
                             <i data-lucide="monitor" class="theme-segment-icon"></i>
@@ -50,12 +45,10 @@
                             <span>{{ _('settings.theme_dark') }}</span>
                         </button>
                     </div>
+                    <div class="setting-desc">{{ _('settings.theme_desc') }}</div>
                 </div>
                 <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">{{ _('settings.language') }}</div>
-                        <div class="setting-desc">{{ _('settings.language_desc') }}</div>
-                    </div>
+                    <div class="setting-title">{{ _('settings.language') }}</div>
                     <div class="theme-segmented" id="lang-segmented" role="radiogroup" aria-label="{{ _('settings.language_aria') }}">
                         <button type="button" class="theme-segment" data-lang-value="system" role="radio" aria-checked="false">
                             <i data-lucide="monitor" class="theme-segment-icon"></i>
@@ -70,6 +63,7 @@
                             <span>{{ _('settings.language_en') }}</span>
                         </button>
                     </div>
+                    <div class="setting-desc">{{ _('settings.language_desc') }}</div>
                 </div>
             </section>
 
