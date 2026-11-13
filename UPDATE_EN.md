@@ -19,19 +19,11 @@ This file covers releases from `v1.6.0` onward; for earlier changes, refer to th
 - The home and login pages are rendered in the chosen language on first paint, with no flash of Chinese that is replaced afterwards; `<html lang>` follows the language as well
 - Entries missing a translation fall back to Simplified Chinese instead of exposing raw copy keys in the UI
 - Task log bodies, task names and descriptions, environment variable values, `config.yml` comments and notification bodies are left untouched
-
-### Fixed
-
-- Fixed tasks aborting on Windows (outside Docker) as soon as a log line contained an emoji: output is now exchanged as UTF-8 end to end, and console printing degrades gracefully instead of raising (this used to break `NodeSeek`, `FnClub` and others right after their first emoji log line)
-
-## v1.7.1
-
-### Changed
-
 - Theme switching now cross-fades the whole page: old and new colors blend at the same progress, so no area changes before another
 
 ### Fixed
 
+- Fixed tasks aborting on Windows (outside Docker) as soon as a log line contained an emoji: output is now exchanged as UTF-8 end to end, and console printing degrades gracefully instead of raising (this used to break `NodeSeek`, `FnClub` and others right after their first emoji log line)
 - Fixed frame drops when switching themes: the transition no longer recalculates styles or repaints the whole page per frame, and no longer recomputes the modal backdrop blur
 
 ## v1.7.0
