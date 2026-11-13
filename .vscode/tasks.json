@@ -1,0 +1,426 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "交互式菜单（推荐）",
+            "detail": "python manage.py —— 进入交互式管理菜单",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "运行 WebUI（本地 5000 端口）",
+            "detail": "python src/webapp.py —— 本地启动 Flask WebUI，访问 http://localhost:5000",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "webapp.py"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/src",
+                "env": {
+                    "WEBUI_PORT": "5000"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "容器: 启动",
+            "detail": "python manage.py start —— 启动 LiteCron 容器",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "start"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "容器: 停止",
+            "detail": "python manage.py stop —— 停止 LiteCron 容器",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "stop"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "容器: 重启",
+            "detail": "python manage.py restart —— 重启容器（改 config.yml 后只需重启）",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "restart"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "容器: 状态",
+            "detail": "python manage.py status —— 查看容器运行状态与端口映射",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "status"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "容器: 跟踪日志",
+            "detail": "python manage.py logs —— 实时输出容器日志（Ctrl+C 退出）",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "logs"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "容器: 进入 Shell",
+            "detail": "python manage.py shell —— 进入容器内部 bash（Ctrl+D 退出）",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "shell"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "容器: 构建镜像",
+            "detail": "python manage.py build —— 使用缓存构建 Docker 镜像",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "build"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "容器: 构建镜像（无缓存）",
+            "detail": "python manage.py build --no-cache —— 忽略缓存重新安装依赖",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "build",
+                "--no-cache"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "容器: 更新项目",
+            "detail": "python manage.py update —— 拉取代码并更新镜像",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "update"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "任务: 列出定时任务",
+            "detail": "python manage.py list —— 查看 config.yml 中的任务与 cron 表达式",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "list"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "任务: 查看任务日志",
+            "detail": "python manage.py tasklogs —— 查看任务执行日志（Ctrl+C 退出）",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "tasklogs"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "任务: 执行指定任务（容器内）",
+            "detail": "python manage.py run <任务名> —— 需先启动容器",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "run",
+                "${input:taskName}"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": "test"
+        },
+        {
+            "label": "任务: 本地执行指定任务",
+            "detail": "python manage.py run-local <任务名> —— 不依赖 Docker，直接本机运行",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "run-local",
+                "${input:taskName}"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "任务: 容器内执行全部任务",
+            "detail": "python manage.py run --all —— 在容器内运行所有已启用任务",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "run",
+                "--all"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "任务: 本地执行全部任务",
+            "detail": "python manage.py run-local --all —— 本机运行所有已启用任务",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "run-local",
+                "--all"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "任务: 直接运行当前脚本",
+            "detail": "python <当前打开的文件> —— 调试单个 tasks/*.py 脚本",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "${file}"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "配置: 校验 config.yml",
+            "detail": "python manage.py validate —— 检查配置文件语法与字段",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "validate"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "配置: 重新加载",
+            "detail": "python manage.py reload —— 重新生成 crontab 与环境变量",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "reload"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "通知: 发送测试通知",
+            "detail": "python manage.py notify \"测试消息\" -l —— 附带最近日志发送通知",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "notify",
+                "来自 VS Code 的测试通知",
+                "-l"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "维护: 清理日志",
+            "detail": "python manage.py clean —— 清理 7 天前的日志",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "clean"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "维护: 安装依赖",
+            "detail": "pip install -r requirements.txt —— 本地开发环境依赖",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                "requirements.txt"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "维护: 显示帮助",
+            "detail": "python manage.py help —— 查看全部可用命令",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "manage.py",
+                "help"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "taskName",
+            "type": "pickString",
+            "description": "选择要执行的任务（对应 config.yml 中的 name）",
+            "options": [
+                "iKuuu",
+                "PTTime",
+                "CarPT",
+                "SMZDM",
+                "TieBa",
+                "FnClub",
+                "AliyunPan",
+                "Bilibili",
+                "V2EX",
+                "NodeSeek",
+                "ZhuTiX"
+            ],
+            "default": "iKuuu"
+        }
+    ]
+}
