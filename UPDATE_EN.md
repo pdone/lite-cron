@@ -4,6 +4,14 @@
 
 This file covers releases from `v1.6.0` onward; for earlier changes, refer to the git history and GitHub Releases.
 
+## v1.8.1
+
+### Changed
+
+- The "Display" group in the settings modal now uses a grid layout: the title shares a row with its control and the description takes a full row, so switches and the theme/language selectors share one left edge
+- The footer is now a single separated row, "LiteCron WebUI / GitHub", with the link relabelled to GitHub
+- SMZDM: task logs now include the `error_code` returned by the check-in API, dump the raw response when no reward is found, and re-check gold and silver after signing in, so "signed in with 0 points" can be told apart from "already signed in today"
+
 ## v1.8.0
 
 ### Added

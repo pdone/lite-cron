@@ -87,8 +87,10 @@ def robot_token(cookie: str) -> str:
 def sign(cookie: str, token: str) -> tuple:
     """执行签到
 
-    返回 (error_code, error_msg, data)
+    返回 (error_code, error_msg, data, result)
     - error_code: 0=成功, 其他=失败/已签到
+    - data: 本次请求参数（/checkin/all_reward 需要复用同一套 token/sk/sign）
+    - result: 接口原始返回，用于奖励缺失时输出原文排查
     """
     time_stamp = round(time.time() * 1000)
     headers = HEADERS.copy()
@@ -119,11 +121,12 @@ def sign(cookie: str, token: str) -> tuple:
             result.get("error_code", -1),
             result.get("error_msg", "未知响应"),
             data,
+            result,
         )
     except Exception as e:
         # 记录接口返回的完整内容，便于排查签到失败原因
         log_response_detail(resp)
-        return -1, f"签到请求失败: {e}", None
+        return -1, f"签到请求失败: {e}", None, None
 
 
 def get_all_reward(cookie: str, data: dict) -> list:
@@ -239,14 +242,31 @@ def main() -> int:
 
     # 执行签到
     log_info("执行签到...")
-    error_code, error_msg, data = sign(cookie, token)
-    log_info(error_msg)
+    error_code, error_msg, data, result = sign(cookie, token)
+
+    # error_msg 是站点原文（如「签到成功，+0积分」），附上 error_code 才能区分成功与已签到
+    if error_code == 0:
+        log_info(f"{error_msg} (error_code={error_code})")
+    else:
+        log_warning(f"{error_msg} (error_code={error_code})")
 
     # error_code == 0 表示签到成功；其他情况（已签到、重复签到等）跳过奖励查询
     if error_code == 0 and data:
         reward_msgs = get_all_reward(cookie, data)
-        for msg in reward_msgs:
-            log_info(f"{msg['name']}: {msg['value']}")
+        if reward_msgs:
+            for msg in reward_msgs:
+                log_info(f"{msg['name']}: {msg['value']}")
+        else:
+            # 奖励为空时输出签到接口原文，用于确认「+0积分」是站点文案还是解析失效
+            log_response_detail(result, keyword="reward")
+
+    # 签到后复核资产：金币/碎银有增长说明奖励已到账，可用于自证签到是否真的生效
+    after_info = get_user_info(cookie)
+    log_info(
+        "资产变动: "
+        f"金币 {user_info['gold']} -> {after_info['gold']}，"
+        f"碎银 {user_info['silver']} -> {after_info['silver']}"
+    )
 
     log_success("任务完成")
     return 0
