@@ -4,7 +4,7 @@
 
 功能：
 - 自动签到获取奖励
-- 显示金币、碎银、等级信息
+- 显示金币、碎银、等级信息（网页登录态不可用时自动跳过，不影响签到）
 
 环境变量：
 - SMZDM_COOKIE: 登录 cookie（必需）
@@ -33,7 +33,8 @@ import requests
 BASE_URL = "https://user-api.smzdm.com"
 CHECKIN_URL = f"{BASE_URL}/checkin"
 TOKEN_URL = f"{BASE_URL}/robot/token"
-USER_URL = "https://zhiyou.smzdm.com/user/"
+# 用户中心网页的登录数据接口：页面 SSR 恒为游客态，登录信息由该接口在客户端拉取
+USER_INFO_URL = "https://zhiyou.smzdm.com/web/user/ajax_get_my_info"
 
 HEADERS = {
     "Host": "user-api.smzdm.com",
@@ -117,8 +118,13 @@ def sign(cookie: str, token: str) -> tuple:
         resp = requests.post(url=CHECKIN_URL, headers=headers, data=data, timeout=30)
         resp.raise_for_status()
         result = resp.json()
+        # 站点以字符串返回 error_code（如 "0"），必须归一化后再判断成功
+        try:
+            error_code = int(result.get("error_code", -1))
+        except (TypeError, ValueError):
+            error_code = -1
         return (
-            result.get("error_code", -1),
+            error_code,
             result.get("error_msg", "未知响应"),
             data,
             result,
@@ -163,54 +169,59 @@ def get_all_reward(cookie: str, data: dict) -> list:
     return msgs
 
 
-def get_user_info(cookie: str) -> dict:
-    """获取用户信息（金币、碎银、等级）"""
+def get_user_info(cookie: str):
+    """获取用户信息（昵称、等级、金币、碎银）
+
+    调用用户中心网页使用的 JSON 接口；返回 None 表示不可用，调用方不得用
+    占位值冒充，用户信息失败不影响签到与退出码。
+    """
     headers = {
-        "Host": "zhiyou.smzdm.com",
-        "Accept": "*/*",
-        "Connection": "keep-alive",
         "Cookie": cookie,
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148/smzdm 10.4.6 rv:130.1 (iPhone 13; iOS 15.6; zh_CN)/iphone_smzdmapp/10.4.6/wkwebview/jsbv_1.0.0",
-        "Accept-Language": "zh-CN,zh-Hans;q=0.9",
-        "Referer": "https://m.smzdm.com/",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://www.smzdm.com/user/",
     }
 
     resp = None
     try:
-        resp = requests.get(url=USER_URL, headers=headers, timeout=30)
+        resp = requests.get(
+            url=USER_INFO_URL, headers=headers, timeout=30, allow_redirects=False
+        )
+        if resp.is_redirect or 300 <= resp.status_code < 400:
+            location = resp.headers.get("Location", "")
+            log_warning(f"获取用户信息失败: 接口重定向 -> {location}")
+            log_response_detail(f"HTTP {resp.status_code} redirect -> {location}")
+            return None
         resp.raise_for_status()
-        html = resp.text
-
-        # 解析用户信息
-        name_match = re.search(
-            r'<a href="https://zhiyou.smzdm.com/user"> (.*?) </a>', html, re.S
-        )
-        level_match = re.search(
-            r'<img src="https://res.smzdm.com/h5/h5_user/dist/assets/level/(.*?)\.png',
-            html,
-            re.S,
-        )
-        gold_match = re.search(
-            r'<div class="assets-part assets-gold">\s*<span class="assets-part-element assets-num">(.*?)</span>',
-            html,
-            re.S,
-        )
-        silver_match = re.search(
-            r'<div class="assets-part assets-prestige">\s*<span class="assets-part-element assets-num">(.*?)</span>',
-            html,
-            re.S,
-        )
-
-        return {
-            "name": name_match.group(1).strip() if name_match else "未知用户",
-            "level": level_match.group(1).strip() if level_match else "未知",
-            "gold": gold_match.group(1).strip() if gold_match else "0",
-            "silver": silver_match.group(1).strip() if silver_match else "0",
-        }
+        payload = resp.json()
     except Exception as e:
         log_warning(f"获取用户信息失败: {e}")
         log_response_detail(resp)
-        return {"name": "未知用户", "level": "未知", "gold": "0", "silver": "0"}
+        return None
+
+    try:
+        error_code = int(payload.get("error_code", -1))
+    except (TypeError, ValueError):
+        error_code = -1
+
+    data = payload.get("data") or {}
+    user = data.get("user") or {}
+    wallet = data.get("wallet") or {}
+    level_match = re.search(r"/level/(\d+)\.png", str(user.get("level_icon") or ""))
+    user_info = {
+        "name": "" if user.get("nickname") is None else str(user.get("nickname")).strip(),
+        "level": level_match.group(1) if level_match else "",
+        "gold": "" if wallet.get("gold") is None else str(wallet.get("gold")).strip(),
+        "silver": "" if wallet.get("silver") is None else str(wallet.get("silver")).strip(),
+    }
+
+    if error_code == 0 and all(user_info.values()):
+        return user_info
+
+    log_warning(f"用户信息不可用: {payload.get('error_msg') or '接口未返回完整用户数据'}")
+    log_response_detail(resp)
+    return None
 
 
 def main() -> int:
@@ -222,16 +233,19 @@ def main() -> int:
         log_warning("任务终止: 未配置有效凭据")
         return 1
 
-    # 获取用户信息
+    # 获取用户信息（不可用时如实标注，不用占位值冒充）
     log_info("获取用户信息...")
     user_info = get_user_info(cookie)
-    log_info(
-        "用户信息:\n"
-        f"  昵称: {user_info['name']}\n"
-        f"  等级: {user_info['level']}\n"
-        f"  金币: {user_info['gold']}\n"
-        f"  碎银: {user_info['silver']}"
-    )
+    if user_info:
+        log_info(
+            "用户信息:\n"
+            f"  昵称: {user_info['name']}\n"
+            f"  等级: {user_info['level']}\n"
+            f"  金币: {user_info['gold']}\n"
+            f"  碎银: {user_info['silver']}"
+        )
+    else:
+        log_warning("用户信息不可用：已跳过金币/碎银展示与签到后复核")
 
     # 获取 token
     log_info("获取签到 token...")
@@ -260,13 +274,19 @@ def main() -> int:
             # 奖励为空时输出签到接口原文，用于确认「+0积分」是站点文案还是解析失效
             log_response_detail(result, keyword="reward")
 
-    # 签到后复核资产：金币/碎银有增长说明奖励已到账，可用于自证签到是否真的生效
-    after_info = get_user_info(cookie)
-    log_info(
-        "资产变动: "
-        f"金币 {user_info['gold']} -> {after_info['gold']}，"
-        f"碎银 {user_info['silver']} -> {after_info['silver']}"
-    )
+    # 签到后复核资产：仅在签到前拿到用户信息时才请求，且只在两次都成功时输出对比
+    if user_info:
+        after_info = get_user_info(cookie)
+        if after_info:
+            log_info(
+                "资产变动: "
+                f"金币 {user_info['gold']} -> {after_info['gold']}，"
+                f"碎银 {user_info['silver']} -> {after_info['silver']}"
+            )
+        else:
+            log_warning("资产变动: 不可用（签到后用户信息获取失败）")
+    else:
+        log_warning("资产变动: 不可用（签到前用户信息获取失败，已跳过复核）")
 
     log_success("任务完成")
     return 0

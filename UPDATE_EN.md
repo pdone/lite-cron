@@ -4,6 +4,14 @@
 
 This file covers releases from `v1.6.0` onward; for earlier changes, refer to the git history and GitHub Releases.
 
+## v1.8.2
+
+### Fixed
+
+- SMZDM: user info is now read from the JSON endpoint used by the user center, so nickname, level, gold and silver show up again and the old redirect-looped user page is no longer requested
+- SMZDM: when the user info endpoint reports an unauthenticated session or incomplete data, the task now says user info is unavailable instead of showing an unknown user and a fake `0 -> 0` asset change; user info failures do not affect sign-in or the exit code
+- SMZDM: fixed the check-in `error_code` being returned as a string and misread as a failure; successful check-ins are logged at INFO again, and rewards such as experience and consecutive-day counts are shown again
+
 ## v1.8.1
 
 ### Changed
