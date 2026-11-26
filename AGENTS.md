@@ -328,6 +328,11 @@ python manage.py restart       # No rebuild needed - config is volume-mounted
 - Features: Task list, manual execution, log viewer, config editor
 - API endpoints: `/api/status`, `/api/tasks`, `/api/logs`, `/api/tasks/<name>/run`, `/api/tasks/<name>/toggle`
 
+### 更新日志页（/changelog）
+
+- 首页头部的版本号链接到 `/changelog`，页面按界面语言读取仓库根部的 `UPDATE.md` / `UPDATE_EN.md` 并服务端渲染（`src/changelog.py`，无第三方 Markdown 依赖）。
+- 两份文件是唯一事实源：`Dockerfile` 通过 `COPY UPDATE.md UPDATE_EN.md ./` 带入镜像，`.dockerignore` 中 `*.md` 之后的 `!UPDATE.md` / `!UPDATE_EN.md` 负责放行。修改日志内容后需重新构建镜像（`python manage.py build`），不要把文件复制到 `src/` 下。
+
 ### 主题模式（浅色 / 跟随系统 / 深色）
 
 主题是**纯浏览器偏好**，不进入 `config.yml`，也不经过 `/api/settings`。

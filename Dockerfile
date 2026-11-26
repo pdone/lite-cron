@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 应用文件层
 COPY src/ ./
 COPY tasks/ ./tasks/
+COPY UPDATE.md UPDATE_EN.md ./
 
 # 设置权限并创建日志目录
 RUN chmod +x entrypoint.sh logger.sh

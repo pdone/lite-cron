@@ -30,7 +30,15 @@ MESSAGES = {
     "header.settings": "设置",
     "header.logout": "退出",
     "header.logout_title": "退出登录",
+    "header.changelog_tooltip": "查看更新日志",
     "footer.github": "GitHub",
+
+    # ==================== 更新日志 ====================
+    "changelog.title": "更新日志",
+    "changelog.doc_title": "更新日志 - LiteCron",
+    "changelog.back": "返回首页",
+    "changelog.current_version": "当前版本",
+    "changelog.err_missing": "更新日志暂时不可用，请稍后重试，或在仓库中查看更新日志文件。",
 
     # ==================== 任务列表 ====================
     "tasks.title": "定时任务",

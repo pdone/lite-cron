@@ -31,6 +31,9 @@ from logger import log_info, log_success, log_error, log_warning
 # 界面语言：t()/resolve_language()/install() 等，详见 i18n.py
 import i18n
 
+# 更新日志：按界面语言读取仓库根部的 UPDATE*.md，详见 changelog.py
+from changelog import render_changelog, version_anchor
+
 # 项目路径配置 - 文件位于 /app/ 下
 PROJECT_ROOT = Path(__file__).parent.absolute()
 
@@ -47,6 +50,12 @@ TEMPLATE_DIR = PROJECT_ROOT / "template"
 STATIC_DIR = PROJECT_ROOT / "static"
 VERSION_FILE = PROJECT_ROOT / "VERSION"
 
+# 界面语言 -> 仓库根部的更新日志文件名
+CHANGELOG_FILES = {
+    "zh-CN": "UPDATE.md",
+    "en": "UPDATE_EN.md",
+}
+
 
 def get_app_version() -> str:
     """从 VERSION 文件读取应用版本号"""
@@ -54,6 +63,18 @@ def get_app_version() -> str:
         return VERSION_FILE.read_text(encoding="utf-8").strip()
     except Exception:
         return "unknown"
+
+
+def resolve_changelog_path(lang: str) -> Optional[Path]:
+    """更新日志路径：容器内为 /app/<name>，本地开发回退仓库根部。"""
+    filename = CHANGELOG_FILES.get(lang)
+    if not filename:
+        return None
+    for base in (PROJECT_ROOT, PROJECT_ROOT.parent):
+        candidate = base / filename
+        if candidate.is_file():
+            return candidate
+    return PROJECT_ROOT / filename
 
 
 APP_VERSION = get_app_version()
@@ -980,6 +1001,37 @@ def index():
         "index.html",
         app_version=APP_VERSION,
         auth_enabled=bool(AUTH_TOKEN),
+    )
+
+
+@app.route("/changelog")
+def changelog_page():
+    """站内更新日志：按界面语言读取仓库根部的 UPDATE*.md"""
+    lang = i18n.current_language()
+    path = resolve_changelog_path(lang)
+    content = ""
+    error: Optional[str] = None
+
+    if path is None or not path.is_file():
+        log_error(f"[WebUI] 更新日志文件缺失: {CHANGELOG_FILES.get(lang, lang)}")
+        error = i18n.t("changelog.err_missing")
+    else:
+        try:
+            content = render_changelog(
+                path.read_text(encoding="utf-8"),
+                APP_VERSION,
+                current_label=i18n.t("changelog.current_version"),
+            )
+        except (OSError, UnicodeError) as exc:
+            log_error(f"[WebUI] 读取更新日志失败 ({path.name}): {exc}")
+            error = i18n.t("changelog.err_missing")
+
+    return render_template(
+        "changelog.html",
+        app_version=APP_VERSION,
+        changelog_html=content,
+        changelog_error=error,
+        current_anchor=version_anchor(APP_VERSION),
     )
 
 

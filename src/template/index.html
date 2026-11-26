@@ -19,7 +19,7 @@
             }
         } catch (e) {}
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='23') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='24') }}">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
@@ -30,7 +30,7 @@
                     <img src="{{ url_for('static', filename='favicon.svg') }}" alt="LiteCron" class="logo-icon">
                     <div class="logo-text">
                         <h1><a href="https://github.com/pdone/lite-cron" target="_blank" rel="noopener noreferrer">LiteCron</a></h1>
-                        <span class="logo-version">v{{ app_version }}</span>
+                        <a class="logo-version" href="/changelog" title="{{ _('header.changelog_tooltip') }}" aria-label="{{ _('header.changelog_tooltip') }}">v{{ app_version }}</a>
                     </div>
                 </div>
                 <div class="header-actions">

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}" data-theme="system">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ _('changelog.doc_title') }}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- 与首页同一套主题偏好，放在样式表之前，避免首屏闪烁或加载时播放一次主题过渡 -->
+    <script>
+        try {
+            var savedTheme = localStorage.getItem('litecron_theme');
+            if (savedTheme === 'light' || savedTheme === 'dark') {
+                document.documentElement.dataset.theme = savedTheme;
+            }
+        } catch (e) {}
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='24') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <img src="{{ url_for('static', filename='favicon.svg') }}" alt="LiteCron" class="logo-icon">
+                    <div class="logo-text">
+                        <h1><a href="/">LiteCron</a></h1>
+                        <span class="logo-version">v{{ app_version }}</span>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <a class="btn btn-sm btn-secondary" href="/" title="{{ _('changelog.back') }}">
+                        <i data-lucide="arrow-left" class="btn-icon"></i>
+                        {{ _('changelog.back') }}
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <main class="main">
+            <div class="card changelog-card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i data-lucide="scroll-text" class="title-icon"></i>
+                        {{ _('changelog.title') }}
+                    </h2>
+                </div>
+                <div class="card-body changelog-body">
+                    {% if changelog_error %}
+                    <div class="changelog-empty">
+                        <i data-lucide="file-warning" class="changelog-empty-icon"></i>
+                        <p>{{ changelog_error }}</p>
+                        <a class="btn btn-sm btn-secondary" href="/">{{ _('changelog.back') }}</a>
+                    </div>
+                    {% else %}
+                    <article class="changelog">{{ changelog_html | safe }}</article>
+                    {% endif %}
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p class="footer-line">
+                <span class="footer-item">LiteCron WebUI</span>
+                <span class="footer-item"><a href="https://github.com/pdone/lite-cron" target="_blank" rel="noopener noreferrer">{{ _('footer.github') }}</a></span>
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        (function () {
+            // 带锚点进入时交给浏览器原生定位，避免覆盖用户手选的版本
+            if (window.location.hash) {
+                return;
+            }
+            var current = document.getElementById({{ current_anchor|tojson }});
+            if (!current) {
+                return;
+            }
+            var rect = current.getBoundingClientRect();
+            if (rect.top < 0 || rect.top > window.innerHeight * 0.6) {
+                current.scrollIntoView({ block: 'start' });
+            }
+        })();
+    </script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

@@ -500,6 +500,24 @@ body::before {
     letter-spacing: 0.02em;
 }
 
+a.logo-version {
+    text-decoration: none;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: color var(--transition-fast);
+}
+
+a.logo-version:hover {
+    color: var(--accent-primary-light);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+a.logo-version:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
 .logo h1 a {
     text-decoration: none;
     background: var(--gradient-primary);
@@ -1183,6 +1201,128 @@ body::before {
 
 @keyframes spin {
     to { transform: rotate(360deg); }
+}
+
+/* ==================== 站内更新日志 ==================== */
+.changelog-card {
+    width: 100%;
+    max-width: 920px;
+    margin: 0 auto;
+}
+
+.changelog-body {
+    padding: var(--spacing-lg) var(--spacing-xl) var(--spacing-xl);
+}
+
+.changelog {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    line-height: 1.75;
+}
+
+.changelog-version {
+    padding-left: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    border-left: 2px solid var(--border-color);
+    scroll-margin-top: var(--spacing-lg);
+}
+
+.changelog-version:last-child {
+    margin-bottom: 0;
+}
+
+.changelog-version.is-current {
+    border-left-color: var(--accent-primary);
+}
+
+.changelog h2 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin: 0 0 var(--spacing-sm);
+    font-family: var(--font-mono);
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.changelog h3 {
+    margin: var(--spacing-md) 0 var(--spacing-sm);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.changelog ul {
+    margin: 0 0 var(--spacing-md);
+    padding-left: 1.25rem;
+}
+
+.changelog li + li {
+    margin-top: 6px;
+}
+
+.changelog li::marker {
+    color: var(--accent-primary);
+}
+
+.changelog p {
+    margin: var(--spacing-sm) 0;
+}
+
+.changelog code {
+    padding: 1px 5px;
+    font-family: var(--font-mono);
+    font-size: 0.8125em;
+    color: var(--text-primary);
+    background: var(--bg-input);
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+}
+
+.changelog a {
+    color: var(--accent-primary-light);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color var(--transition-fast);
+}
+
+.changelog a:hover {
+    border-bottom-color: currentColor;
+}
+
+.changelog-current-badge {
+    padding: 2px 8px;
+    font-family: var(--font-sans);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--accent-primary-light);
+    background: var(--bg-active);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-full);
+}
+
+.changelog-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-2xl) var(--spacing-lg);
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.changelog-empty-icon {
+    width: 36px;
+    height: 36px;
+    color: var(--text-muted);
+}
+
+.changelog-empty-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke-width: var(--icon-stroke-width);
 }
 
 .footer {
@@ -2826,5 +2966,19 @@ code
     .card-stats {
         width: 100%;
         justify-content: flex-end;
+    }
+}
+
+@media (max-width: 640px) {
+    .changelog-body {
+        padding: var(--spacing-md);
+    }
+
+    .changelog {
+        font-size: 0.875rem;
+    }
+
+    .changelog-version {
+        padding-left: var(--spacing-sm);
     }
 }

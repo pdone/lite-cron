@@ -28,7 +28,15 @@ MESSAGES = {
     "header.settings": "Settings",
     "header.logout": "Sign out",
     "header.logout_title": "Sign out",
+    "header.changelog_tooltip": "View changelog",
     "footer.github": "GitHub",
+
+    # ==================== Changelog ====================
+    "changelog.title": "Changelog",
+    "changelog.doc_title": "Changelog - LiteCron",
+    "changelog.back": "Back to home",
+    "changelog.current_version": "Current version",
+    "changelog.err_missing": "The changelog is unavailable. Try again later, or view it in the repository.",
 
     # ==================== Task list ====================
     "tasks.title": "Scheduled Tasks",

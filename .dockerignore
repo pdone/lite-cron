@@ -39,6 +39,8 @@ compose.example.yml
 # 其他
 README.md
 *.md
+!UPDATE.md
+!UPDATE_EN.md
 AGENTS.md
 .env
 .env.example

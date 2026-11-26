@@ -4,6 +4,14 @@
 
 This file covers releases from `v1.6.0` onward; for earlier changes, refer to the git history and GitHub Releases.
 
+## v1.9.0
+
+### Added
+
+- The header version number is now clickable and opens the in-app changelog in the same tab, without leaving the WebUI or going to GitHub
+- The changelog page shows `UPDATE.md` or `UPDATE_EN.md` according to the current interface language, and highlights the running version when it opens
+- The changelog ships with the image for offline reading and renders correctly in Simplified Chinese and English, in both light and dark themes
+
 ## v1.8.2
 
 ### Fixed
